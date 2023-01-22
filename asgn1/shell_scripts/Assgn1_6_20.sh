@@ -1,5 +1,5 @@
 #!/bin/bash
-declare -i limit=50
+declare -i limit=1000000
 
 numbers=($(seq 2 $limit))
 spf=($(seq 2 $limit))
