@@ -1,38 +1,45 @@
 #!/bin/bash
 
-# find ./nmt-master/ -type f -name "*.py" > python_files.txt
-find $1 -name "*.py" > python_files.txt
+# Redirected the output to a output_file instead of printing on terminal for better readabilty, delete it before running again
 
-while IFS= read -r line; do
-    
-    # Print Filename and Filepath
-    filename="$(basename $line)"
-    echo "FILE NAME : $filename"
-    echo "FILE PATH : $line"
+output_file="output_q5.txt"
+for file in $1/*; do
+    if [[ $file == *.py ]]; then
+        echo "File Name: $file" >> "$output_file"
+        lineno=1
+        while read -r line; do
 
-    # Get octothorpe comments
-    grep -no "#.*" $line
-    # Works perfectly, also handles the case when there's some code followed by a single line comment
+            # if the line contains a comment then print the line number in the file and the line
+            if [[ $line == *\#* ]]; then
+                if [[ $line != *\#*\"* ]] || [[ $line == *\#*\"*\"* ]]; then
+                    echo "Line number: $lineno" >> "$output_file"
+                    echo "$line" >> "$output_file"
+                fi
+            fi
 
-    # Get multiline comments using either """ or '''
-
-
-    printf "\n\n"
-done < python_files.txt
-
-
-
-
-# Ideas Worth Trying
-
-# grep -wno '#' ./nmt-master/nmt/train.py | cut -d: -f1 => Also has comments of type print("#some shit , text to be printed")
-
-# awk '/"""/ {print NR; }' ./nmt-master/nmt/train.py  => Only prints line number as of now
-# grep -n "\"\"\"" ./nmt-master/nmt/train.py => Gives a single output for lines containing two """ and also need to handle ending """
-# grep -no "\"\"\"" ./nmt-master/nmt/train.py => Gives line number of both starting and ending line
-# while IFS= read -r line; do awk '{if(NR==$line) print $0}' ./nmt-master/nmt/train.py; done < lines.txt => No Idea why this doesnt work
-
-# Failed Ideas
-
-    # grep -n "#" $line
-    # This however prints the entire line which is bad for the case when you have some code followed by a comment
+            # if its a multi line comment then print onlt the starting line number in the file and the entire comment
+            if [[ $line == \"\"\"* ]]; then
+                if [[ $line != \"\"\" ]] && [[ $line != \"\"\"\)* ]]; then
+                    echo "Line number: $lineno" >> "$output_file"
+                    num=1
+                    while read -r line2; do
+                        if [[ $num -ge $lineno ]]; then
+                            echo "$line2" >> "$output_file"
+                            if [[ $line2 == *\"\"\" ]]; then
+                                break
+                            fi
+                        fi
+                        num=$((num+1))
+                    done < "$file"
+                    echo $'\n' >> "$output_file"
+                fi
+                
+            fi
+            lineno=$((lineno+1))
+        done < "$file"
+        echo $'\n' $'\n' '----------------------------------------------------------------------------------------------------------' $'\n' >> "$output_file"
+    fi
+    if [[ -d $file ]]; then
+        bash Assgn1_5_17.sh $file >> "$output_file"
+    fi
+done
