@@ -6,6 +6,7 @@ output_file="output_q5.txt"
 for file in $1/*; do
     if [[ $file == *.py ]]; then
         echo "File Name: $file" >> "$output_file"
+        echo "" >> "$output_file"
         lineno=1
         while read -r line; do
 
@@ -14,6 +15,7 @@ for file in $1/*; do
                 if [[ $line != *\#*\"* ]] || [[ $line == *\#*\"*\"* ]]; then
                     echo "Line number: $lineno" >> "$output_file"
                     echo "$line" >> "$output_file"
+                    echo "" >> "$output_file"
                 fi
             fi
 
@@ -31,7 +33,7 @@ for file in $1/*; do
                         fi
                         num=$((num+1))
                     done < "$file"
-                    echo $'\n' >> "$output_file"
+                    echo "" >> "$output_file"
                 fi
                 
             fi
