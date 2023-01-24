@@ -1,13 +1,13 @@
-07-01-23,rent,1000,Chris
-01-01-23,food,550,Sudarshan
-01-01-23,drinks,250,Mohan
-09-01-23,shopping,200,Brian
-05-01-23,rent,200,David
-10-01-23,food,150,Megan
-06-01-23,food,150,Samantha
-04-01-23,shopping,125,Emily
-01-01-23,food,100,John
-08-01-23,movie,75,Amanda
-03-01-23,movie,75,Mike
-02-01-23,movie,50,Mary
 
+01-01-23,drinks,250,Mohan
+01-01-23,food,100,John
+01-01-23,food,550,Sudarshan
+02-01-23,movie,50,Mary
+03-01-23,movie,75,Mike
+04-01-23,shopping,125,Emily
+05-01-23,rent,200,David
+06-01-23,food,150,Samantha
+07-01-23,rent,1000,Chris
+08-01-23,movie,75,Amanda
+09-01-23,shopping,200,Brian
+10-01-23,food,150,Megan

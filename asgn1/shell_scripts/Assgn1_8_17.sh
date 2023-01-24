@@ -4,7 +4,7 @@
 Help(){
     
     printf "NAME \n"
-    printf "\tCSV File Manipulator - A Expense Tracker for when you go out with your friends and chose to use a terminal based program for no apparent reason. \n"
+    printf "\tCSV File Manipulator - A Expense Tracker for when you go out with your friends and choose to use a terminal based program for no apparent reason. (Splitwise FTW) \n"
     printf "\n"
 
     printf "SYNOPSIS \n"
@@ -36,10 +36,14 @@ Help(){
 touch main.csv
 
 # There could be any number of arguments but the entry record would be the last 4 arguments
-if [[ $# -gt 4 ]]; then
-    record="${@: -4}"
-    arr=($record)
-    echo ${arr[0]},${arr[1]},${arr[2]},${arr[3]} >> main.csv
+if [[ $# -gt 3 ]]; then
+    check="${@:(-2):1}"
+    firstchar=${check:0:1}
+    if [[ "$firstchar" != "-" ]]; then
+        record="${@: -4}"
+        arr=($record)
+        echo ${arr[0]},${arr[1]},${arr[2]},${arr[3]} >> main.csv
+    fi
 fi
 
 
