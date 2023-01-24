@@ -29,8 +29,8 @@ do
   while [ $line -ne 1 ]
   do
     index=$(($line-2))
-    echo -n "${spf[$index]} " >> "output.txt"
+    echo -n "${spf[$index]} " >> "q6_output.txt"
     line=$(($line/${spf[$index]}))
   done
-  echo "" >> "output.txt"
-done < "input.txt"
+  echo "" >> "q6_output.txt"
+done < "q6_input.txt"
