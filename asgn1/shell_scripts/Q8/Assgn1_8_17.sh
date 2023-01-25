@@ -8,8 +8,10 @@ Help(){
     printf "\n"
 
     printf "SYNOPSIS \n"
-    printf "\t./Assgn1_8_17.sh [OPTION] [RECORD] \n"
+    printf "\t./Assgn1_8_17.sh [OPTIONS] [RECORD] \n"
+    printf "\t./Assgn1_8_17.sh [OPTIONS] \n"
     printf "\t./Assgn1_8_17.sh [RECORD] \n"
+    printf "A record is defined as 4 arguments of the form : Date(dd-mm-yy) Category Amount Name "
     printf "\n"
 
     printf "DESCRIPTION \n"
@@ -24,6 +26,22 @@ Help(){
     printf "\t Valid arguments are : {date, category, amount, name} \n\n"
     printf "\t-h \n"
     printf "\t Show  Help Prompt. \n\n"
+
+    printf "AUTHOR \n"
+    printf "\t Written by Vibhu.  \n"
+    printf "\n"
+
+    printf "REPORTING BUGS\n"
+    printf "\t PLEASE DON'T (Any mistakes in this part are entirely the fault of Prerit Paliwal)\n"
+    printf "\n"
+
+    printf "COPYRIGHT\n"
+    printf "\t Yup.\n"
+    printf "\n"
+
+    printf "SEE ALSO\n"
+    printf "\t Other parts of this assignemnt :)\n"
+    printf "\n"
 }
 
 # If you want the column headers in a new file, use this
@@ -36,10 +54,11 @@ Help(){
 touch main.csv
 
 # There could be any number of arguments but the entry record would be the last 4 arguments
+# A false positive could be when there are >= 4 args but they are all options. In that scenario, at least one of the last two args would have to begin with a hyphen "-"
 if [[ $# -gt 3 ]]; then
-    check="${@:(-2):1}"
-    firstchar=${check:0:1}
-    if [[ "$firstchar" != "-" ]]; then
+    check1="{{@:(-2):1}:0:1}"
+    check2="{{@:(-2):1}:0:1}"
+    if [ "$check1" != "-" ] && [ "$check2" != "-" ] ; then
         record="${@: -4}"
         arr=($record)
         echo ${arr[0]},${arr[1]},${arr[2]},${arr[3]} >> main.csv
@@ -85,7 +104,8 @@ while getopts "c:n:s:h" option; do
 
         # Sort the csv based on the date  in that entry
         if [[ "$col" = "date" ]]; then
-            sort -k1 -t, main.csv > temp.csv
+            # sort -k1 -t, main.csv > temp.csv
+            sort -n -t"-" -k3 -k2 -k1 main.csv > temp.csv
             mv temp.csv  main.csv
 
         # Sort the csv based on the name of category in that entry
