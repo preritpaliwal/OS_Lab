@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.pl": "prolog",
+        "atomic": "c",
+        "unistd.h": "c"
+    }
+}
