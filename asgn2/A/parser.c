@@ -13,7 +13,7 @@ cmd *cmd_init(const char *user_input){
     c->in_redirect = 0;
     c->out_redirect = 0;
     c->in_fd = 0;
-    c->out_fd = 0;
+    c->out_fd = 1;
     c->fd[0] = 0;
     c->fd[1] = 0;
     c->background = 0;

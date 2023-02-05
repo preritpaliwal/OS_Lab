@@ -1,3 +1,6 @@
+#ifndef __PARSE_H
+#define __PARSE_H
+
 #include "vector.h"
 #define MAX_ARGS 512  // max number of arguments in a command
 
@@ -22,3 +25,4 @@ void str_concat_char(char *s1, char c);
 void cmd_print(cmd *c);
 int cmd_parse(cmd *c, char *err);
 
+#endif

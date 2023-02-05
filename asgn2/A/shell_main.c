@@ -5,6 +5,8 @@
 #include <stdlib.h>
 
 #include "parse.h"
+#include "io_redirect.h"
+
 
 #define MAX_BUFF_SIZE 1024
 
@@ -114,8 +116,9 @@ cmd** tokenise_on_pipe(char * user_input, char *err, int *err_flag, int *num_cmd
 
 int main(){
 
-    // pid_t child_pid, ret_pid;
-    // int status, exit_flag = 0;
+    pid_t child_pid, ret_pid;
+    int status;
+    //  exit_flag = 0;
     // char *args[] =  {"ls", "-l", "-R", "-a", NULL};
 
     while(1){
@@ -157,6 +160,7 @@ int main(){
 
         for (int i = 0; i < num_pipe_cmds; i++){
             
+            // tokenise the individual commands 
             if (cmd_parse(piped_cmds_seq[i], err) == -1){
                 printf("%s\n", err);
                 err_flag = -1;
@@ -164,7 +168,7 @@ int main(){
             }
         }
 
-        if (err_flag == -1){
+        if (err_flag == -1){ // atleast one of the subcommands is invalid
             continue;
         }
 
@@ -174,7 +178,102 @@ int main(){
         }
         
 
-        // if the user has entered a valid command
+        // if the user has entered a valid command and there is no pipe in the command
+        if (num_pipe_cmds == 1){
+
+            if (!strcmp(piped_cmds_seq[0]->args->data[0], "exit")){
+                
+                if (piped_cmds_seq[0]->args->size > 2){ // more than 1 argument in the exit command
+                    printf("Invalid command! Only 1 numeric arg (exit status) allowed with the exit command.\n");
+                    continue;
+                }
+                else{
+
+                    if (piped_cmds_seq[0]->args->size == 2){ // the user has entered an exit status
+                        int exit_status = atoi(piped_cmds_seq[0]->args->data[1]);
+                        printf("Exiting the shell with exit status %d.\n", exit_status);
+                        exit(exit_status);
+                    }
+                    else{ // the user has not entered an exit status
+                        printf("Exiting the shell.\n");
+                        exit(0);
+                    }
+                }
+            }
+
+            else if (!strcmp(piped_cmds_seq[0]->args->data[0], "cd")){
+                if (piped_cmds_seq[0]->args->size > 2){ // more than 1 argument in the cd command
+                    printf("cd: Too many arguments.\n");
+                    continue;
+                }
+                else{
+                    if (piped_cmds_seq[0]->args->size == 2){ // the user has not entered a path
+                        if (!strcmp(piped_cmds_seq[0]->args->data[1], "~")){ // the user has entered ~ as the path
+                            chdir(getenv("HOME"));
+                        }
+                        else if (!strcmp(piped_cmds_seq[0]->args->data[1], "-")){ // the user has entered - as the path
+                            chdir(getenv("OLDPWD"));
+                        }
+                        else{ // the user has entered a path
+                            if (chdir(piped_cmds_seq[0]->args->data[1]) == -1){
+                                perror("cd: ");
+                            }
+                        }
+                    }
+
+                    else if (piped_cmds_seq[0]->args->size == 1){ // the user has not entered a path
+                        chdir(getenv("HOME"));
+                    }
+                }
+            }
+
+            else {
+                // if there is no pipe in the command
+                if (num_pipe_cmds == 1){
+                    child_pid = fork();
+
+                    if (child_pid == -1){
+                        perror("Failed to fork.\n");
+                        exit(1);
+                    }
+
+                    if (child_pid == 0){ // child process
+                        
+                        printf("CHILD:This is the child process.\n");
+                        printf("CHILD:The child process ID is %d.\n", getpid());
+
+                        // handle the redirection of input and output
+                        handle_io_redirect(piped_cmds_seq[0]);
+
+
+                        if (execvp(piped_cmds_seq[0]->args->data[0], piped_cmds_seq[0]->args->data) == -1){
+                            perror("Failed to execute command.\n");
+                            exit(1);
+                        }
+
+                        exit(0);
+                    }
+                    else{ // parent process
+                        if (piped_cmds_seq[0]->background == 0){ // the parent process waits for the child process to finish
+                            ret_pid = waitpid(child_pid, &status, 0);
+                            if (ret_pid == -1){
+                                perror("Failed to wait for child process.\n");
+                                exit(1);
+                            }
+                            printf("PARENT: The child process %d has terminated.\n", ret_pid);
+                        }
+                    }
+                }
+
+            }
+
+
+
+
+        }
+
+
+
         
 
 

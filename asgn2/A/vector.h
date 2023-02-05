@@ -1,3 +1,7 @@
+#ifndef __VECTOR_H
+#define __VECTOR_H
+
+
 typedef struct vector_string {
     char **data;
     int size;
@@ -10,4 +14,4 @@ void vector_string_push_back(struct vector_string *v, char *s);
 
 void vector_string_free(struct vector_string *v);
 
-
+#endif
