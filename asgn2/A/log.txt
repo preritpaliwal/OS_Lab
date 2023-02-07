@@ -9,3 +9,5 @@ PARENT: The child process 154344 has terminated.
 PARENT: The child process 154756 has terminated.
 PARENT: The child process 155037 has terminated.
 PARENT: The child process 155396 has terminated.
+PARENT: The child process 162289 has terminated.
+PARENT: The child process 165697 has terminated.

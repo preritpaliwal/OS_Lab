@@ -4,10 +4,10 @@
 
 vector_string *vector_string_init(int capacity)
 {
-    vector_string *v = malloc(sizeof(vector_string));
+    vector_string *v = (vector_string *)malloc(sizeof(vector_string));
     v->capacity = capacity;
     v->size = 0;
-    v->data = malloc(sizeof(char *) * capacity);
+    v->data = (char **)malloc(sizeof(char *) * capacity);
     return v;
 }
 
@@ -16,9 +16,9 @@ void vector_string_push_back(struct vector_string *v, char *s)
     if (v->size == v->capacity)
     {
         v->capacity *= 2;
-        v->data = realloc(v->data, sizeof(char *) * (v->capacity) );
+        v->data = (char **)realloc(v->data, sizeof(char *) * (v->capacity) );
     }
-    v->data[v->size] = malloc(sizeof(char) * (strlen(s) + 1));
+    v->data[v->size] = (char *)malloc(sizeof(char) * (strlen(s) + 1));
     strcpy(v->data[v->size], s);
     v->size++;
 }

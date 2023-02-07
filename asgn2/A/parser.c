@@ -4,7 +4,7 @@
 #include <string.h>
 
 cmd *cmd_init(const char *user_input){
-    cmd *c = malloc(sizeof(cmd));
+    cmd *c = (cmd *)malloc(sizeof(cmd));
     c->full_cmd = (char *)malloc(sizeof(char) * (strlen(user_input) + 1));
     strcpy(c->full_cmd, user_input);
     c->args = vector_string_init(MAX_ARGS);
@@ -28,12 +28,12 @@ void cmd_free(cmd *c){
 }
 
 void str_concat_str(char *s1, char *s2){
-    s1 = realloc(s1, sizeof(char) * (strlen(s1) + strlen(s2) + 1));
+    s1 = (char *)realloc(s1, sizeof(char) * (strlen(s1) + strlen(s2) + 1));
     strcat(s1, s2);
 }
 
 void str_concat_char(char *s1, char c){
-    s1 = realloc(s1, sizeof(char) * (strlen(s1) + 2));
+    s1 = (char *)realloc(s1, sizeof(char) * (strlen(s1) + 2));
     s1[strlen(s1)] = c;
     s1[strlen(s1) + 1] = '\0';
 }
