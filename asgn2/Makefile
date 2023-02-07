@@ -1,2 +1,2 @@
-shell.out: 
-	gcc -o shell.out ./A/shell_main.c ./A/io_redirect.c ./A/parser.c ./A/vector.c
+shell.out: shell_main.c io_redirect.c parser.c vector.c
+	gcc -o shell.out shell_main.c io_redirect.c parser.c vector.c

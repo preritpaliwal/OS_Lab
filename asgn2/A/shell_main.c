@@ -310,16 +310,95 @@ int main()
                         else
                         {
                             ret_pid = waitpid(-1, &status, WNOHANG);
-                            if (ret_pid == -1){
+                            if (ret_pid == -1)
+                            {
                                 perror("Failed to wait for the child process.\n");
                                 exit(1);
                             }
                             printf("PARENT: The child process %d has terminated.\n", ret_pid);
-
                         }
-                        
                     }
                 }
+            }
+        }
+
+        else if (num_pipe_cmds > 1)
+        {
+            printf("\n\nHandling PIPED.\n\n");
+
+            int pipe_in = 0;
+            int pipe_fd[2];
+            memset(pipe_fd, 0, sizeof(pipe_fd));
+
+            int n = num_pipe_cmds;
+
+            for (int i = 0; i < n - 1; i++)
+            {
+                pipe(pipe_fd);
+
+                child_pid = fork();
+
+                if (child_pid == -1)
+                {
+                    perror("Failed to fork.\n");
+                    exit(1);
+                }
+
+                if (child_pid == 0)
+                { // child process
+
+                    // printf("It is the %dth child process in the pipe with PID = %d.\n\n", i + 1, getpid());
+
+                    // handle the redirection of input and output
+                    // handle_io_redirect(piped_cmds_seq[0]);
+
+                    close(STDIN_FILENO);
+                    dup2(pipe_in, STDIN_FILENO);
+
+                    close(STDOUT_FILENO);
+                    dup2(pipe_fd[1], STDOUT_FILENO);
+
+                    // if (execvp(piped_cmds_seq[0]->args->data[0], piped_cmds_seq[0]->args->data) == -1)
+                    if (execvp(piped_cmds_seq[i]->args->data[0], piped_cmds_seq[i]->args->data) == -1)
+                    {
+                        perror("Failed to execute command.\n");
+                        exit(1);
+                    }
+
+                    exit(0);
+                }
+
+                close(pipe_fd[1]);
+
+                pipe_in = pipe_fd[0];
+            }
+
+            pipe(pipe_fd);
+
+            child_pid = fork();
+
+            if (child_pid == -1)
+            {
+                perror("Failed to fork.\n");
+                exit(1);
+            }
+
+            if (child_pid == 0)
+            {
+
+                // handle_io_redirect(piped_cmds_seq[0]);
+
+                close(STDIN_FILENO);
+                dup2(pipe_in, STDIN_FILENO);
+                // printf("It is the last [%d] child process in the pipe with PID = %d.\n\n", n, getpid());
+
+                if (execvp(piped_cmds_seq[n - 1]->args->data[0], piped_cmds_seq[n - 1]->args->data) == -1)
+                {
+                    perror("Failed to execute command.\n");
+                    exit(1);
+                }
+
+                exit(0);
             }
         }
 
