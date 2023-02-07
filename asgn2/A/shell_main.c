@@ -3,10 +3,8 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <stdlib.h>
-
 #include "parse.h"
 #include "io_redirect.h"
-
 
 #define MAX_BUFF_SIZE 1024
 
@@ -114,12 +112,37 @@ cmd** tokenise_on_pipe(char * user_input, char *err, int *err_flag, int *num_cmd
     return piped_cmds_seq;
 }
 
+static void manage_child(int sig){
+    int status;
+    pid_t ret_pid;
+    while(1){
+        ret_pid = waitpid(-1, &status, WNOHANG);
+        if (ret_pid == 0){
+            break;
+        }
+        else if (ret_pid == -1){
+            // perror("waitpid");
+            break;
+        }
+        else{
+            // printf("Child %d exited with status %d\n", ret_pid, status);
+        }
+
+    }
+
+}
+
 int main(){
+
+    FILE * log_fp;
+    log_fp = fopen("log.txt", "a+");
 
     pid_t child_pid, ret_pid;
     int status;
     //  exit_flag = 0;
     // char *args[] =  {"ls", "-l", "-R", "-a", NULL};
+
+    signal(SIGCHLD, manage_child);
 
     while(1){
         printf("\033[1;31m");  // set the text color to red
@@ -188,7 +211,6 @@ int main(){
                     continue;
                 }
                 else{
-
                     if (piped_cmds_seq[0]->args->size == 2){ // the user has entered an exit status
                         int exit_status = atoi(piped_cmds_seq[0]->args->data[1]);
                         printf("Exiting the shell with exit status %d.\n", exit_status);
@@ -239,8 +261,8 @@ int main(){
 
                     if (child_pid == 0){ // child process
                         
-                        printf("CHILD:This is the child process.\n");
-                        printf("CHILD:The child process ID is %d.\n", getpid());
+                        fprintf(log_fp, "CHILD:This is the child process.\n");
+                        fprintf(log_fp, "CHILD:The child process ID is %d.\n", getpid());
 
                         // handle the redirection of input and output
                         handle_io_redirect(piped_cmds_seq[0]);
@@ -251,6 +273,8 @@ int main(){
                             exit(1);
                         }
 
+                        
+
                         exit(0);
                     }
                     else{ // parent process
@@ -260,7 +284,19 @@ int main(){
                                 perror("Failed to wait for child process.\n");
                                 exit(1);
                             }
-                            printf("PARENT: The child process %d has terminated.\n", ret_pid);
+                            fprintf(log_fp, "PARENT: The child process %d has terminated.\n", ret_pid);
+                        }
+                        else {
+                            ret_pid = waitpid(child_pid, &status, WNOHANG);
+                            if (ret_pid == -1){
+                                perror("Failed to wait for child process.\n");
+                                exit(1);
+                            }
+                            printf("ret_pid = %d\n", ret_pid);
+                            if(ret_pid != 0){
+                                printf("PARENT: The child process %d has terminated.\n", ret_pid);
+                            }
+                            // fprintf(log_fp, "PARENT: The child process %d has terminated.\n", ret_pid);
                         }
                     }
                 }
@@ -378,5 +414,6 @@ int main(){
     // }
 
     }
+    fclose(log_fp);
     return 0;
 }

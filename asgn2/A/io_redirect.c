@@ -21,7 +21,7 @@ void handle_io_redirect(cmd *c){
 
     if (c->out_redirect == 1){
         // c->out_fd = open(c->output_file, O_WRONLY | O_APPEND);
-        c->out_fd = open(c->output_file, O_WRONLY | O_CREAT , 0644);
+        c->out_fd = open(c->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         close(STDOUT_FILENO);
         dup(c->out_fd);
     }

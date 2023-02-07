@@ -13,13 +13,13 @@ int main()
     char* outfile = "outfile.txt";
 
     // Cmd and Args are extracted from parser
-    char* args[] = {"wc", "-w", "-l", "--bytes", infile , NULL};
+    // char* args[] = {"wc", "-w", "-l", "--bytes", infile , NULL};
+    char* args[] = {"ls", "~/", NULL};
+    char* cmd = "ls";
 
-    char* cmd = "wc";
-
-    int fd = open(outfile, O_WRONLY | O_APPEND);
-    dup2(fd,1);
-    close(fd);
+    // int fd = open(outfile, O_WRONLY | O_APPEND);
+    // dup2(fd,1);
+    // close(fd);
 
     execvp(cmd,args);
 
