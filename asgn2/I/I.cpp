@@ -8,7 +8,6 @@
 #include <sys/types.h>
 #include <signal.h>
 #include <sys/wait.h>
-#include <vector>
 
 using namespace std;
 
@@ -43,14 +42,28 @@ int main(int argc, char *argv[])
         {
             cout << pids[i] << endl;
         }
+        cout << "kill? (y/n): "
+             << "\n";
+        char c;
+        cin >> c;
+        if (c == 'y')
+        {
+            for (int i = 0; pids[i] > 0; i++)
+            {
+                kill(pids[i], SIGKILL);
+            }
+            remove(argv[1]);
+        }
     }
     else if (p == 0)
     {
         close(fd[0]);
         dup(fd[1]);
 
+        // get pids locking on the file
         int *pids = (int *)malloc(100 * sizeof(int));
-        }
+        write(fd[1], pids, sizeof(pids));
+    }
     else
     {
         perror("fork error");
