@@ -1,24 +1,25 @@
-total 216
-drwxrwxr-x  2 nyati_pranav26 nyati_pranav26  4096 Feb  8 01:35 .
-drwxrwxr-x 16 nyati_pranav26 nyati_pranav26  4096 Feb  8 01:32 ..
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   321 Feb  8 01:18 A.c
--rwxrwxr-x  1 nyati_pranav26 nyati_pranav26 16840 Feb  8 01:18 a.out
--rw-r--r--  1 nyati_pranav26 nyati_pranav26     0 Feb  8 01:35 bakwas.txt
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26    10 Feb  7 11:03 inp.txt
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   690 Feb  8 00:17 io_redirect.c
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   109 Feb  5 19:14 io_redirect.h
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   653 Feb  5 19:29 lcm.txt
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   583 Feb  7 13:43 log.txt
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   138 Feb  8 00:05 Makefile
--rw-r--r--  1 nyati_pranav26 nyati_pranav26   493 Feb  7 10:14 out1.txt
--rw-r--r--  1 nyati_pranav26 nyati_pranav26   733 Feb  7 10:59 out.txt
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   948 Feb  5 19:11 parse.h
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26  5997 Feb  8 00:12 parser.c
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26 21285 Feb  8 01:20 shell_main.cpp
--rwxrwxr-x  1 nyati_pranav26 nyati_pranav26 50048 Feb  8 01:20 shell.out
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26 25879 Feb  7 18:41 temp.cpp
--rwxrwxr-x  1 nyati_pranav26 nyati_pranav26 16880 Feb  5 19:40 test.out
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   350 Feb  7 19:08 utils.c
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   195 Feb  7 19:05 utils.h
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   791 Feb  8 00:13 vector.c
--rw-rw-r--  1 nyati_pranav26 nyati_pranav26   310 Feb  5 19:11 vector.h
+alan
+albert
+Alexander
+Amelia
+Benjamin
+Brooklyn
+Bruce
+David
+Diego
+George
+Grace
+Harry
+henry
+Jake
+Jill
+John
+Kate
+Mark
+michael
+Paul
+penelope
+Peter
+Tom
+william
+Willis

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <glob.h>
 
 cmd *cmd_init(const char *user_input){
     cmd *c = (cmd *)malloc(sizeof(cmd));
@@ -156,7 +157,57 @@ int cmd_parse(cmd *c, char *err){
         }
 
         else{
-            vector_string_push_back(c->args, tokens->data[j]);
+            // if jth token contains * or ? then it is a wildcard
+            if ( (strchr(tokens->data[j], '*') != NULL ) || (strchr(tokens->data[j], '?') != NULL) )
+            {
+                // invoke the glob function on this token
+                glob_t wildcard_matches;
+                memset(&wildcard_matches, 0, sizeof(wildcard_matches));
+                printf("globbing %s\n", tokens->data[j]);
+               
+                int ret_val =  glob(tokens->data[j], GLOB_TILDE | GLOB_MARK | GLOB_BRACE, NULL, &wildcard_matches);
+
+                if (ret_val != 0){   // in case of error in globbing, handle different error cases
+
+                    switch (ret_val){
+                        case GLOB_NOSPACE:
+                            strcpy(err, "glob failed: insufficient memory\n");
+                            break;
+                        
+                        case GLOB_ABORTED:
+                            strcpy(err, "glob failed: read error\n");
+                            break;
+                        
+                        case GLOB_NOMATCH:
+                            strcpy(err, "glob failed: no match found\n");
+                            break;
+
+                        default:
+                            strcpy(err, "glob failed: unknown error\n");
+                            break;
+                    }
+
+                    globfree(&wildcard_matches);
+                    return -1;
+                }
+
+                else {
+                    printf("globbing successful\n");
+                    printf("number of glob matches: %ld\n", wildcard_matches.gl_pathc);
+                    for (size_t k = 0; k < wildcard_matches.gl_pathc; k++){
+                        // printf("%s\n", wildcard_matches.gl_pathv[i]);
+                        vector_string_push_back(c->args, wildcard_matches.gl_pathv[k]);
+                    }
+
+                    globfree(&wildcard_matches);
+                }
+                
+
+            }
+
+            else {
+                vector_string_push_back(c->args, tokens->data[j]);
+            }
         }
     }
 
