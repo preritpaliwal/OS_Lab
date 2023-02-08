@@ -15,15 +15,10 @@ void handle_io_redirect(cmd *c){
             printf("Error opening input file: %s\n", c->input_file);
             exit(1);
         }
-        // close(STDIN_FILENO);
-        // dup(c->in_fd);
     }
 
     if (c->out_redirect == 1){
-        // c->out_fd = open(c->output_file, O_WRONLY | O_APPEND);
         c->out_fd = open(c->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        // close(STDOUT_FILENO);
-        // dup(c->out_fd);
     }
 
     return;
