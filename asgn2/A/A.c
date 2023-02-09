@@ -15,6 +15,7 @@ int main(){
     for (int i = 0; i < n; i++){
         printf("Hello: %d\n", i + 1);
     }
+    printf("%ld\n", sizeof(char *));
     return 0;
 
 }

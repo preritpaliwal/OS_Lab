@@ -45,7 +45,7 @@ void str_concat_char(char *s1, char c){
 int cmd_parse(cmd *c, char *err){
     vector_string *tokens = vector_string_init(MAX_ARGS);
     char *temp = strdup("");
-    // printf("%d", c->full_cmd[strlen(c->full_cmd) - 1]);
+    printf("%d", c->full_cmd[strlen(c->full_cmd) - 1]);
     for (int i = 0; i < strlen(c->full_cmd); i++){
 
         if (c->full_cmd[i] == '\\'){
@@ -125,9 +125,12 @@ int cmd_parse(cmd *c, char *err){
         temp = strdup("");
     }
 
-    // for (int i = 0; i < tokens->size; i++){
-    //     printf("%s1\n", tokens->data[i]);
-    // }
+    for (int i = 0; i < tokens->size; i++){
+        // null terminated string
+        str_concat_char(tokens->data[i], '\0');
+        printf("%s1\n", tokens->data[i]);
+
+    }
 
     for (int j = 0; j < tokens->size; j++){
         if (!strcmp(tokens->data[j], "<")){
@@ -164,11 +167,15 @@ int cmd_parse(cmd *c, char *err){
             if ( (strchr(tokens->data[j], '*') != NULL ) || (strchr(tokens->data[j], '?') != NULL) )
             {
                 // invoke the glob function on this token
+
+                // null terminate the token
+                // tokens->data[j][strlen(tokens->data[j])] = '\0';
+                
                 glob_t wildcard_matches;
                 memset(&wildcard_matches, 0, sizeof(wildcard_matches));
                 printf("globbing %s\n", tokens->data[j]);
                
-                int ret_val =  glob(tokens->data[j], GLOB_TILDE | GLOB_MARK | GLOB_BRACE, NULL, &wildcard_matches);
+                int ret_val =  glob(tokens->data[j], GLOB_TILDE | GLOB_BRACE, NULL, &wildcard_matches);
 
                 if (ret_val != 0){   // in case of error in globbing, handle different error cases
 

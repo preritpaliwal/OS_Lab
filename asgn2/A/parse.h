@@ -2,7 +2,7 @@
 #define __PARSE_H
 
 #include "vector.h"
-#define MAX_ARGS 512  // max number of arguments in a command
+#define MAX_ARGS 32  // max number of arguments in a command
 
 typedef struct  {
     char *full_cmd;  // entire command as it is typed by the user

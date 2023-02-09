@@ -8,6 +8,7 @@
 #include <vector>
 #include <iostream>
 #include <signal.h>
+#include <stack>
 
 #include "utils.h"
 #include "io_redirect.h"
@@ -19,7 +20,9 @@ using namespace std;
 int curr_pg_id = 0;
 set <int> fg_processes_pid;
 set <int> bg_processes_pid;
+stack <int> suspended_proc_pid;
 
+int send_fg_to_bg = 0;
 int fg_process_group_id = 0;
 
 // fpid is the pid of the foreground process if there is no pipe, else it is the pid of the last process in the pipe
@@ -29,7 +32,7 @@ static void manage_child(int sig){
     int status;
     pid_t ret_pid;
     while(true){
-        ret_pid = waitpid(-1, &status, WNOHANG);
+        ret_pid = waitpid(-1, &status, WNOHANG | WUNTRACED);
         if (ret_pid == 0){  // there are one or more child processes in execution, but none of them have exited 
             break;
         }
@@ -47,9 +50,17 @@ static void manage_child(int sig){
             if (fg_processes_pid.find(ret_pid) != fg_processes_pid.end()){  // if the process that exited was a foreground process
                 fg_processes_pid.erase(ret_pid);  // remove the pid of the foreground process from the set of foreground processes
                 
-                if (WIFEXITED(status)){
+                if (WIFSTOPPED(status)){
+                    printf("\nCtrl-Z pressed.\n");
+                    printf("\nFg process with pid %d suspended with status %d\n", ret_pid, WSTOPSIG(status));
+                    suspended_proc_pid.push(ret_pid);
+                }
+
+
+                else if (WIFEXITED(status)){
                     printf("\nFg process with pid %d exited normally with status %d\n", ret_pid, WEXITSTATUS(status));
                 }
+
                 else{
                     printf("\nFg process with pid %d exited abnormally with status %d\n", ret_pid, WEXITSTATUS(status));    
                 }
@@ -74,9 +85,6 @@ static void manage_child(int sig){
 }
 
 void sigint_handler(int sig){
-    // signal(SIGINT, sigint_handler);
-    // printf("\n");
-    // fflush(stdout);
     return;
 }
 
@@ -93,17 +101,9 @@ static void wait_for_fg_process(pid_t pid) {
     unblock_SIGCHLD();
 }
 
-void force_bg_run_handler(int sig){
-    // signal(SIGTSTP, force_bg_run_handler);
 
-    if (fgpid != 0){ // if there is a foreground process running
-    
-    // // send the process to background and let it execute in the background using SIGTSTP followed by SIGCONT
-    // kill(-1*fg_process_group_id, SIGTSTP);  // send the foreground process group a SIGTSTP signal to stop the process
-    // kill(-1*fg_process_group_id, SIGCONT); // now the process is in the background, send a SIGCONT signal to continue the process
-        fgpid = 0;  // set the fgpid to 0 to denote that no foreground process is running from now on
-    }
-    // return;
+void sigtstp_handler(int sig){
+    return;
 }
 
 
@@ -113,6 +113,11 @@ void handle_process(cmd ** cmd_seq, int *num_piped_cmds, int background){
     fg_process_group_id = 0;
     //clear the set of foreground processes, if any
     fg_processes_pid.clear();
+    send_fg_to_bg = 0;
+
+    while (suspended_proc_pid.size() > 0){
+        suspended_proc_pid.pop();
+    }
 
     int pipefd[2];
     int last_cmd_pid = 0;
@@ -214,7 +219,7 @@ void handle_process(cmd ** cmd_seq, int *num_piped_cmds, int background){
         }
 
 
-        if (!background)  // if the command is not a background process, add it to the set of foreground processes
+        if (background == 0)  // if the command is not a background process, add it to the set of foreground processes
             fg_processes_pid.insert(child_pid);
         
         else
@@ -228,33 +233,40 @@ void handle_process(cmd ** cmd_seq, int *num_piped_cmds, int background){
 
     }
 
-    if (background == 1){  // if the command is a background process, print the pid of the last command in the pipe
+    if (background == 1)
+    {  // if the command is a background process, print the pid of the last command in the pipe
         unblock_SIGCHLD();
     }
 
     else if (background == 0){  // if the command is not a background process, wait for the last command in the pipe to finish executing
+        printf("Waiting for process %d to finish executing.\n", last_cmd_pid);
         wait_for_fg_process(last_cmd_pid);
     
+        // continue any suspended process in background
+        while (!suspended_proc_pid.empty()){
+            bg_processes_pid.insert(suspended_proc_pid.top());
+            kill(suspended_proc_pid.top(), SIGCONT);
+            suspended_proc_pid.pop();
+        }
 
         // reset the process grp of the parent(our own shell) as the foreground process grp on the terminal associated with the stdin file descriptor
         if (tcsetpgrp(STDIN_FILENO, getpgid(0)) == -1){
             perror("tcsetpgrp: ");
             exit(1);
         }
-        
-        // // clear the cmd seq if the foreground process has finished executing
-        // for (int i = 0; i < *num_piped_cmds; i++){
-        //     cmd_free(cmd_seq[i]);
-        // };
 
     }
-
 
     // clear the set of foreground processes, if any
     fg_processes_pid.clear();
 
+    while (!suspended_proc_pid.empty()){
+        suspended_proc_pid.pop();
+    }
+
     curr_pg_id = 0;  // reset the curr_pg_id to 0
     fg_process_group_id = 0;  // reset the fg_process_group_id to 0
+    send_fg_to_bg = 0;  // reset the send_fg_to_bg flag to 0
 }
 
 
@@ -399,11 +411,12 @@ int main()
 
     signal(SIGINT, sigint_handler); // SIGINT is sent to the process when the user presses Ctrl+C
 
-    signal(SIGTSTP, force_bg_run_handler); // SIGTSTP is sent to the process when the user presses Ctrl+Z, but here we need to send process to the background if Ctrl+Z is pressed
+    signal(SIGTSTP, sigtstp_handler); // SIGTSTP is sent to the process when the user presses Ctrl+Z, but here we need to send process to the background if Ctrl+Z is pressed
 
     signal(SIGTTOU, SIG_IGN); 
 
     while(1){
+        // fflush(stdout);
         printf("\033[1;31m");  // set the text color to red
         printf("%s:", getenv("USER"));
         printf("\033[1;33m");            // set the text color to yellow
@@ -413,6 +426,7 @@ int main()
         size_t input_size = 0;
         char *user_input = NULL;
 
+        // fflush(stdin);
         // read the user input
         if (getline(&user_input, &input_size, stdin) == -1)
         {
