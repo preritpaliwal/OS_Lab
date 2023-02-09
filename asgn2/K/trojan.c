@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
-#define MAX_PAR_CHILD 2
-#define MAX_CHILD_CHILD 2
-#define SLEEP_TIME 5
+#define MAX_PAR_CHILD 5
+#define MAX_CHILD_CHILD 10
+#define SLEEP_TIME 120
 
 void attack()
 {
