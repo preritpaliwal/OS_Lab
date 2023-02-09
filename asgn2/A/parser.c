@@ -32,20 +32,26 @@ void str_concat_str(char *s1, char *s2){
     // printf("str_concat_str: realloc \n");
     s1 = (char *)realloc(s1, sizeof(char) * (strlen(s1) + strlen(s2) + 1));
     strcat(s1, s2);
-    s1[strlen(s1) + strlen(s2)] = '\0';
+    s1[strlen(s1) + 1] = '\0';
 }
 
 void str_concat_char(char *s1, char c){
     // printf("str_concat_char: realloc \n");
     s1 = (char *)realloc(s1, sizeof(char) * (strlen(s1) + 2));
-    s1[strlen(s1)] = c;
-    s1[strlen(s1) + 1] = '\0';
+    int p =strlen(s1);
+    s1[p] = c;
+    s1[p + 1] = '\0';
 }
 
 int cmd_parse(cmd *c, char *err){
     vector_string *tokens = vector_string_init(MAX_ARGS);
     char *temp = strdup("");
-    printf("%d", c->full_cmd[strlen(c->full_cmd) - 1]);
+    // printf("%d", c->full_cmd[strlen(c->full_cmd) - 1]);
+    // if (c->full_cmd[strlen(c->full_cmd) - 1] == ' ' || c->full_cmd[strlen(c->full_cmd) - 1] == '\t' || c->full_cmd[strlen(c->full_cmd) - 1] == '\n'){
+    //     c->full_cmd[strlen(c->full_cmd) - 1] = '\0';
+    // }
+
+    // str_concat_char(c->full_cmd, '\n');
     for (int i = 0; i < strlen(c->full_cmd); i++){
 
         if (c->full_cmd[i] == '\\'){
@@ -127,8 +133,12 @@ int cmd_parse(cmd *c, char *err){
 
     for (int i = 0; i < tokens->size; i++){
         // null terminated string
-        str_concat_char(tokens->data[i], '\0');
-        printf("%s1\n", tokens->data[i]);
+        // str_concat_char(tokens->data[i], '\0');
+        // printf("%s1\n", tokens->data[i]);
+        for (int j = 0; j < strlen(tokens->data[i]); j++){
+            printf("%d_", tokens->data[i][j]);
+        }
+        printf("\n");
 
     }
 
@@ -163,19 +173,22 @@ int cmd_parse(cmd *c, char *err){
         }
 
         else{
+
+            // vector_string_push_back(c->args, tokens->data[j]);
             // if jth token contains * or ? then it is a wildcard
             if ( (strchr(tokens->data[j], '*') != NULL ) || (strchr(tokens->data[j], '?') != NULL) )
             {
+                // char *temp_glob = strdup(tokens->data[j]);
                 // invoke the glob function on this token
 
                 // null terminate the token
-                // tokens->data[j][strlen(tokens->data[j])] = '\0';
+                // tokens->data[j][strlen(tokens->data[j])] = '\0'; strcpy(err, "Invalid command! Command cannot end with a backslash
                 
                 glob_t wildcard_matches;
-                memset(&wildcard_matches, 0, sizeof(wildcard_matches));
+                // memset(&wildcard_matches, 0, sizeof(wildcard_matches));
                 printf("globbing %s\n", tokens->data[j]);
                
-                int ret_val =  glob(tokens->data[j], GLOB_TILDE | GLOB_BRACE, NULL, &wildcard_matches);
+                int ret_val =  glob(tokens->data[j], 0, NULL, &wildcard_matches);
 
                 if (ret_val != 0){   // in case of error in globbing, handle different error cases
 
@@ -204,7 +217,7 @@ int cmd_parse(cmd *c, char *err){
                 else {
                     printf("globbing successful\n");
                     printf("number of glob matches: %ld\n", wildcard_matches.gl_pathc);
-                    for (size_t k = 0; k < wildcard_matches.gl_pathc; k++){
+                    for (int k = 0; k < wildcard_matches.gl_pathc; k++){
                         // printf("%s\n", wildcard_matches.gl_pathv[i]);
                         vector_string_push_back(c->args, wildcard_matches.gl_pathv[k]);
                     }
@@ -216,6 +229,7 @@ int cmd_parse(cmd *c, char *err){
             }
 
             else {
+                printf("pushing %s1\n", tokens->data[j]);
                 vector_string_push_back(c->args, tokens->data[j]);
             }
         }
@@ -240,6 +254,133 @@ void cmd_print(cmd *c){
     printf("background: %d\n", c->background);
     return;
 }
+
+
+cmd **tokenise_on_pipe(char *user_input, char *err, int *err_flag, int *num_cmds)
+{
+    vector_string *piped_cmds = vector_string_init(MAX_ARGS);
+    char *temp = strdup("");
+
+    for (int i = 0; i < strlen(user_input) - 1; i++)
+    {
+        if (user_input[i] == '"')
+        {
+            str_concat_char(temp, user_input[i]);
+            i++;
+            while (i < strlen(user_input) - 1 && (user_input[i] != '"' || (user_input[i] == '"' && user_input[i - 1] == '\\')))
+            {
+                str_concat_char(temp, user_input[i]);
+                i++;
+            }
+            if (i == strlen(user_input) - 1)
+            {
+                strcpy(err, "Invalid command! Error in quotes");
+                *err_flag = -1;
+                return NULL;
+            }
+            if (user_input[i] == '"')
+            {
+                str_concat_char(temp, user_input[i]);
+            }
+        }
+
+        else if (user_input[i] == '|')
+        {
+            if (i == strlen(user_input) - 2)
+            { // the user has entered a command like "ls | wc |"
+                strcpy(err, "Invalid command! No command after a pipe.\n");
+                *err_flag = -1;
+                return NULL;
+            }
+
+            if (strlen(temp) != 0)
+            {
+                vector_string_push_back(piped_cmds, temp);
+                // printf("%s\n", temp);
+                temp = strdup("");
+
+                while (user_input[i + 1] == ' ' && i < strlen(user_input) - 1)
+                { // remove the unnnecesarry spaces after pipe
+                    i++;
+                }
+                if (i == strlen(user_input))
+                { // the user has entered a command like "ls | wc |   "
+                    strcpy(err, "Invalid command! No command after a pipe.\n");
+                    *err_flag = -1;
+                    return NULL;
+                }
+            }
+
+            else
+            { // the user has entered a command like "ls || wc" or the cmd starts with a pipe
+                strcpy(err, "Invalid command! Error in using pipe.\n");
+                *err_flag = -1;
+                return NULL;
+            }
+        }
+
+        else
+        {
+            printf("%c\n", user_input[i]);
+            str_concat_char(temp, user_input[i]);
+            // printf("%s\n", temp);
+        }
+    }
+
+    if (strlen(temp) != 0)
+    {
+        printf("%s\n", temp);
+        vector_string_push_back(piped_cmds, temp);
+    }
+
+    cmd **piped_cmds_seq = (cmd **)malloc(piped_cmds->size * sizeof(cmd *));
+    int bg_flag = 0;
+
+
+    for (int i = 0; i < piped_cmds->size; i++)
+    {
+        printf("cmd %d: %s\n", i, piped_cmds->data[i]);
+    }
+
+    // check if the & is present in the last command in the seq of piped commands
+    for (int i = 0; i < piped_cmds->size; i++)
+    {
+        // if the & is not present in the last command in the seq of piped commands
+        // printf("%s\n", piped_cmds->data[i]);
+        if (strchr(piped_cmds->data[i], '&') != NULL)
+        {
+            // printf("Hi!\n");
+            if (i != piped_cmds->size - 1)
+            {
+                strcpy(err, "Invalid command! Cannot have an & in a cmd if it is not the last cmd in a seq of piped cmds.\n");
+                *err_flag = -1;
+                return NULL;
+                // printf("Hello!\n");
+            }
+            else
+            {
+                bg_flag = 1;
+            }
+        }
+    }
+
+    *num_cmds = piped_cmds->size;
+    printf("Num commands: %d\n", *num_cmds);
+
+    for (int i = 0; i < piped_cmds->size; i++)
+    {
+        piped_cmds_seq[i] = cmd_init(piped_cmds->data[i]);
+        if (bg_flag == 1 && i == piped_cmds->size - 1)
+        {
+            piped_cmds_seq[i]->background = 1;
+        }
+    }
+    printf("No error\n");
+
+    // *err_flag = 0;
+    return piped_cmds_seq;
+}
+
 
 // int main(){
 //     char *err = malloc(sizeof(char) * 100);

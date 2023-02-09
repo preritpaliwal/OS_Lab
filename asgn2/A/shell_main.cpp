@@ -88,6 +88,12 @@ void sigint_handler(int sig){
     return;
 }
 
+
+void sigtstp_handler(int sig){
+    return;
+}
+
+
 static void wait_for_fg_process(pid_t pid) {
     fgpid = pid;
     sigset_t empty; // empty set of signals
@@ -99,11 +105,6 @@ static void wait_for_fg_process(pid_t pid) {
         sigsuspend(&empty);   
     }
     unblock_SIGCHLD();
-}
-
-
-void sigtstp_handler(int sig){
-    return;
 }
 
 
@@ -270,134 +271,10 @@ void handle_process(cmd ** cmd_seq, int *num_piped_cmds, int background){
 }
 
 
-cmd **tokenise_on_pipe(char *user_input, char *err, int *err_flag, int *num_cmds)
-{
-    vector_string *piped_cmds = vector_string_init(MAX_ARGS);
-    char *temp = strdup("");
-
-    for (int i = 0; i < strlen(user_input) - 1; i++)
-    {
-        if (user_input[i] == '"')
-        {
-            str_concat_char(temp, user_input[i]);
-            i++;
-            while (i < strlen(user_input) - 1 && (user_input[i] != '"' || (user_input[i] == '"' && user_input[i - 1] == '\\')))
-            {
-                str_concat_char(temp, user_input[i]);
-                i++;
-            }
-            if (i == strlen(user_input) - 1)
-            {
-                strcpy(err, "Invalid command! Error in quotes");
-                *err_flag = -1;
-                return NULL;
-            }
-            if (user_input[i] == '"')
-            {
-                str_concat_char(temp, user_input[i]);
-            }
-        }
-
-        else if (user_input[i] == '|')
-        {
-            if (i == strlen(user_input) - 2)
-            { // the user has entered a command like "ls | wc |"
-                strcpy(err, "Invalid command! No command after a pipe.\n");
-                *err_flag = -1;
-                return NULL;
-            }
-
-            if (strlen(temp) != 0)
-            {
-                vector_string_push_back(piped_cmds, temp);
-                // printf("%s\n", temp);
-                temp = strdup("");
-
-                while (user_input[i + 1] == ' ' && i < strlen(user_input) - 1)
-                { // remove the unnnecesarry spaces after pipe
-                    i++;
-                }
-                if (i == strlen(user_input))
-                { // the user has entered a command like "ls | wc |   "
-                    strcpy(err, "Invalid command! No command after a pipe.\n");
-                    *err_flag = -1;
-                    return NULL;
-                }
-            }
-
-            else
-            { // the user has entered a command like "ls || wc" or the cmd starts with a pipe
-                strcpy(err, "Invalid command! Error in using pipe.\n");
-                *err_flag = -1;
-                return NULL;
-            }
-        }
-
-        else
-        {
-            str_concat_char(temp, user_input[i]);
-        }
-    }
-
-    if (strlen(temp) != 0)
-    {
-        vector_string_push_back(piped_cmds, temp);
-    }
-
-    cmd **piped_cmds_seq = (cmd **)malloc(piped_cmds->size * sizeof(cmd *));
-    int bg_flag = 0;
-
-
-    for (int i = 0; i < piped_cmds->size; i++)
-    {
-        printf("cmd %d: %s\n", i, piped_cmds->data[i]);
-    }
-
-    // check if the & is present in the last command in the seq of piped commands
-    for (int i = 0; i < piped_cmds->size; i++)
-    {
-        // if the & is not present in the last command in the seq of piped commands
-        // printf("%s\n", piped_cmds->data[i]);
-        if (strchr(piped_cmds->data[i], '&') != NULL)
-        {
-            // printf("Hi!\n");
-            if (i != piped_cmds->size - 1)
-            {
-                strcpy(err, "Invalid command! Cannot have an & in a cmd if it is not the last cmd in a seq of piped cmds.\n");
-                *err_flag = -1;
-                return NULL;
-                // printf("Hello!\n");
-            }
-            else
-            {
-                bg_flag = 1;
-            }
-        }
-    }
-
-    *num_cmds = piped_cmds->size;
-    printf("Num commands: %d\n", *num_cmds);
-
-    for (int i = 0; i < piped_cmds->size; i++)
-    {
-        piped_cmds_seq[i] = cmd_init(piped_cmds->data[i]);
-        if (bg_flag == 1 && i == piped_cmds->size - 1)
-        {
-            piped_cmds_seq[i]->background = 1;
-        }
-    }
-    printf("No error\n");
-
-    // *err_flag = 0;
-    return piped_cmds_seq;
-}
 
 
 int main()
 {
-
-    FILE * log_fp;
-    log_fp = fopen("log.txt", "a+");
 
     pid_t child_pid, ret_pid;
     // int status;
@@ -425,23 +302,26 @@ int main()
 
         size_t input_size = 0;
         char *user_input = NULL;
-
+        user_input = (char *)malloc(MAX_BUFF_SIZE * sizeof(char));
         // fflush(stdin);
         // read the user input
-        if (getline(&user_input, &input_size, stdin) == -1)
+        if (fgets(user_input,MAX_BUFF_SIZE,stdin)==NULL)
         {
             free(user_input);
             perror("Failed to read input.\n");
             exit(1);
         }
+        input_size = strlen(user_input);
+        printf("%s", user_input);
 
         // tokenize the user input on the basis of the pipe character
         char *err = strdup("");
         int err_flag = 0;
         int num_pipe_cmds = 0;
         int background_flag = 0;
-        cmd **piped_cmds_seq = tokenise_on_pipe(user_input, err, &err_flag, &num_pipe_cmds);
 
+        cmd **piped_cmds_seq = tokenise_on_pipe(user_input, err, &err_flag, &num_pipe_cmds);
+        free(user_input);
         // if the user has entered an invalid command
         if (err_flag == -1)
         {
@@ -556,8 +436,6 @@ int main()
         }
  
     }
-    fclose(log_fp);
+
     return 0;
 }
-
-

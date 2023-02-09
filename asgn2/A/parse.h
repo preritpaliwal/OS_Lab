@@ -24,5 +24,6 @@ void str_concat_str(char *s1, char *s2);
 void str_concat_char(char *s1, char c);
 void cmd_print(cmd *c);
 int cmd_parse(cmd *c, char *err);
+cmd **tokenise_on_pipe(char *user_input, char *err, int *err_flag, int *num_cmds);
 
 #endif
