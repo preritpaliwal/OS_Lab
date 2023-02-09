@@ -12,6 +12,7 @@
 
 #include "utils.h"
 #include "io_redirect.h"
+#include "editing.h"
 
 #define MAX_BUFF_SIZE 1024
 
@@ -303,16 +304,19 @@ int main()
         size_t input_size = 0;
         char *user_input = NULL;
         user_input = (char *)malloc(MAX_BUFF_SIZE * sizeof(char));
+        
         // fflush(stdin);
         // read the user input
-        if (fgets(user_input,MAX_BUFF_SIZE,stdin)==NULL)
-        {
-            free(user_input);
-            perror("Failed to read input.\n");
-            exit(1);
-        }
+        // if (fgets(user_input,MAX_BUFF_SIZE,stdin)==NULL)
+        // {
+        //     free(user_input);
+        //     perror("Failed to read input.\n");
+        //     exit(1);
+        // }
+        
+        user_input = get_cmd();
         input_size = strlen(user_input);
-        printf("%s", user_input);
+        printf("Recieved input %s on length %d.", user_input, input_size);
 
         // tokenize the user input on the basis of the pipe character
         char *err = strdup("");
@@ -333,7 +337,7 @@ int main()
                 }
                 free(piped_cmds_seq);
             }
-            printf("%s\n", err);
+            printf("Error: %s\n", err);
             continue;
         }
         err = strdup("");
@@ -344,7 +348,7 @@ int main()
             // tokenise the individual commands
             if (cmd_parse(piped_cmds_seq[i], err) == -1)
             {
-                printf("%s\n", err);
+                printf("Error: %s\n", err);
                 err_flag = -1;
                 break;
             }

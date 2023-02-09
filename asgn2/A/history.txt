@@ -1,0 +1,38 @@
+ls
+
+pwd
+
+
+
+ls -l
+
+ls -l | sort -k9
+
+ls -l | sort -k9 > a.txt
+
+exit
+
+ls
+
+ls ../A/
+
+pwd
+
+pwd
+
+pwd > a.txt
+
+
+
+clear
+
+clear
+
+exit
+
+ls
+
+pwd
+
+exit
+
