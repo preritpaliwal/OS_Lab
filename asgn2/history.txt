@@ -1,0 +1,22 @@
+pwd > pwd.txt
+
+ls ../asgn2
+
+ls .
+
+ls
+
+ls
+
+cat pwd.txt
+
+code .
+
+cat pwd.txt
+
+cat pwd.txt
+
+e
+
+exit
+

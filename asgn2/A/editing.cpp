@@ -5,8 +5,7 @@ string getCmd(bool echo)
 
     printf("\n");
 
-    struct termios old, current
-    ;
+    struct termios old, current;
     string cmd, incomplete_cmd;
     signed char c;
     string left = "", right = "";
@@ -40,7 +39,6 @@ string getCmd(bool echo)
     if (history.size() == 1 && history[0] == "")
         no_history = true;
 
-
     int offset = 0, typing = 1, edit_mode = 0, saved_history = history.size();
     int history_size = (no_history) ? 0 : history.size();
     // printf("history.size(): %d\n", history_size);
@@ -64,7 +62,6 @@ string getCmd(bool echo)
 
     current.c_lflag &= (~ICANON & ~ECHO);
 
-
     current.c_cc[VMIN] = 1;
     // printf("%d\n", current.c_cc[VMIN]);  // Default is 1
     current.c_cc[VTIME] = 0;
@@ -79,7 +76,6 @@ string getCmd(bool echo)
         {
             cmd = left + cmd + right;
             left = right = "";
-            cmd += "\n";
             printf("\n");
             break;
         }
@@ -112,13 +108,9 @@ string getCmd(bool echo)
 
                 for (int i = 0; i < len; i++)
                     printf("\b \b");
-                // printf("Up arrow. Going to cmd history[%d]\n", history.size() - 1 - offset);
                 if (offset < history.size())
                 {
                     cmd = history[history.size() - 1 - offset];
-
-                    // printf("\n\t\t\t\tUp arrow. Going to cmd history[%d]\n", history.size() - 1 - offset);
-                    // printf("\t\t\t\tFetched command : %s\n", cmd.c_str());
                     for (int i = 0; i < len; i++)
                         printf("\b \b");
                     printf("%s", cmd.c_str());
@@ -224,15 +216,13 @@ string getCmd(bool echo)
             left = "";
             right = "";
 
-            // for (int i = 0; i < cmd.length(); i++)
-            // printf("\033[1C");
+            for (int i = 0; i < cmd.length(); i++)
+                printf("\033[1C");
         }
 
         else if (((int)c > 31) && ((int)c < 127))
         {
-            // printf("%c", c);
             typing = 1;
-            // putchar(c);
 
             int len = left.size() + cmd.size() + right.size();
             for (int i = 0; i < len; i++)
@@ -258,15 +248,10 @@ string getCmd(bool echo)
     }
 
     cmd = left + cmd + right;
-    // cout << "FINAL COMMAND : " << cmd << endl;
-    // printf("Final Command : %s",cmd.c_str());
 
     fclose(fp); // Close history file after reading
 
     tcsetattr(0, TCSANOW, &old); // Restore old terminal settings
-
-    // for (int i = 0; i < history.size(); i++)
-    // printf("history[%d]: %s\n", i, history[i].c_str());
 
     if ((fp = fopen("history.txt", "a+")) == NULL)
     {
@@ -276,6 +261,7 @@ string getCmd(bool echo)
         fprintf(fp, "%s\n", cmd.c_str());
     fclose(fp);
 
+    cmd += "\n";
     return cmd;
 }
 
