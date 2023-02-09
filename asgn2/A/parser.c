@@ -15,8 +15,8 @@ cmd *cmd_init(const char *user_input){
     c->out_redirect = 0;
     c->in_fd = 0;
     c->out_fd = 1;
-    c->fd[0] = 0;
-    c->fd[1] = 0;
+    // c->fd[0] = 0;
+    // c->fd[1] = 0;
     c->background = 0;
 
     return c;
@@ -29,11 +29,14 @@ void cmd_free(cmd *c){
 }
 
 void str_concat_str(char *s1, char *s2){
+    printf("str_concat_str: realloc \n");
     s1 = (char *)realloc(s1, sizeof(char) * (strlen(s1) + strlen(s2) + 1));
     strcat(s1, s2);
+    s1[strlen(s1) + strlen(s2)] = '\0';
 }
 
 void str_concat_char(char *s1, char c){
+    printf("str_concat_char: realloc \n");
     s1 = (char *)realloc(s1, sizeof(char) * (strlen(s1) + 2));
     s1[strlen(s1)] = c;
     s1[strlen(s1) + 1] = '\0';
@@ -46,9 +49,9 @@ int cmd_parse(cmd *c, char *err){
     for (int i = 0; i < strlen(c->full_cmd); i++){
 
         if (c->full_cmd[i] == '\\'){
-            str_concat_char(temp, c->full_cmd[i]);
+
             i++;
-            if (i != strlen(c->full_cmd) ){
+            if (i < strlen(c->full_cmd) ){
                 str_concat_char(temp, c->full_cmd[i]);
                 i++;
             }

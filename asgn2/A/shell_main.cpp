@@ -20,10 +20,13 @@ int curr_pg_id = 0;
 set <int> fg_processes_pid;
 set <int> bg_processes_pid;
 
+int fg_process_group_id = 0;
+
 // fpid is the pid of the foreground process if there is no pipe, else it is the pid of the last process in the pipe
 static pid_t fgpid = 0; // 0 means no foreground process 
 
 static void manage_child(int sig){
+    signal(SIGCHLD, manage_child);
     int status;
     pid_t ret_pid;
     while(true){
@@ -71,6 +74,13 @@ static void manage_child(int sig){
     return;
 }
 
+void sigint_handler(int sig){
+    signal(SIGINT, sigint_handler);
+    // printf("\n");
+    // fflush(stdout);
+    return;
+}
+
 static void wait_for_fg_process(pid_t pid) {
     fgpid = pid;
     sigset_t empty; // empty set of signals
@@ -84,11 +94,24 @@ static void wait_for_fg_process(pid_t pid) {
     unblock_SIGCHLD();
 }
 
+void force_bg_run_handler(int sig){
+    signal(SIGTSTP, force_bg_run_handler);
 
+    if (fgpid != 0){ // if there is a foreground process running
+    
+    // // send the process to background and let it execute in the background using SIGTSTP followed by SIGCONT
+    // kill(-1*fg_process_group_id, SIGTSTP);  // send the foreground process group a SIGTSTP signal to stop the process
+    // kill(-1*fg_process_group_id, SIGCONT); // now the process is in the background, send a SIGCONT signal to continue the process
+        fgpid = 0;  // set the fgpid to 0 to denote that no foreground process is running from now on
+    }
+    // return;
+}
 
 
 void handle_process(cmd ** cmd_seq, int *num_piped_cmds, int background){
-
+    
+    curr_pg_id = 0;
+    fg_process_group_id = 0;
     //clear the set of foreground processes, if any
     fg_processes_pid.clear();
 
@@ -141,6 +164,21 @@ void handle_process(cmd ** cmd_seq, int *num_piped_cmds, int background){
 
             unblock_SIGCHLD();  // unblock the SIGCHLD signal in the child process as it may also fork its own child processes and we want to be able to handle the SIGCHLD signal in the child process
 
+            // for i == 0, set the process group id of the 1st child process to its own pid 
+            // set the process group id of the 1st child process to its own pid 
+            // (i.e. the 1st child process in a piped set of cmds 
+            // becomes the leader of its own process group, and 
+            // the other child processes in the piped set of cmds 
+            // become the members of the process group of the 1st child process)
+            
+            // for i > 0, set the process group id of the child process to the process group id of the 1st child process
+
+            if (setpgid(0, curr_pg_id) == -1){
+                perror("setpgid: ");
+                exit(1);
+            }
+
+
             if (cmd_seq[i]->in_fd != STDIN_FILENO){  // if the input file descriptor of the command is not STDIN_FILENO, then close the STDIN_FILENO file descriptor
                 // close(STDIN_FILENO);
                 dup2(cmd_seq[i]->in_fd, STDIN_FILENO);  // duplicate the input file descriptor of the command to the STDIN_FILENO file descriptor
@@ -160,13 +198,30 @@ void handle_process(cmd ** cmd_seq, int *num_piped_cmds, int background){
             }
         }
 
+        // setpgid also  called in the parent as well as the child process as we don't know which process will execute first
+        setpgid(child_pid, curr_pg_id);  // set the process group id of the child process to the process group id of the 1st child process 
+        if (curr_pg_id == 0){
+
+            // curr_pg_id is given the value of the pid of the 1st child process 
+            // so that the other child processes in the piped set of cmds 
+            // can be added to the process group of the 1st child process 
+            curr_pg_id = child_pid;  
+            fg_process_group_id = child_pid;  // set the process group id of the foreground process group to the process group id of the 1st child process
+
+            if (background == 0){  // for the process grp with curr_pg_id (this process is assumed to start in fg), set it as the foreground process grp on the terminal associated with the stdin file descriptor
+                tcsetpgrp(STDIN_FILENO, curr_pg_id); // this will block a background process from accessing STDIN of terminal until the foreground process finishes
+            }
+
+        }
+
+
         if (!background)  // if the command is not a background process, add it to the set of foreground processes
             fg_processes_pid.insert(child_pid);
         
         else
             bg_processes_pid.insert(child_pid);
         
-        block_SIGCHLD();  // block the SIGCHLD signal, so that the child process does not get killed before the parent process has a chance to add it to the set of foreground processes
+        unblock_SIGCHLD();  // unblock the SIGCHILD signal now, so that the parent process can handle the SIGCHLD signal
 
         if (i < *num_piped_cmds -1 ){  // close the read end of the pipe, if it is not the last command in the pipe
             close(cmd_seq[i]->out_fd);
@@ -180,11 +235,27 @@ void handle_process(cmd ** cmd_seq, int *num_piped_cmds, int background){
 
     else if (background == 0){  // if the command is not a background process, wait for the last command in the pipe to finish executing
         wait_for_fg_process(last_cmd_pid);
+    
+
+        // reset the process grp of the parent(our own shell) as the foreground process grp on the terminal associated with the stdin file descriptor
+        if (tcsetpgrp(STDIN_FILENO, getpgid(0)) == -1){
+            perror("tcsetpgrp: ");
+            exit(1);
+        }
+        
+        // clear the cmd seq if the foreground process has finished executing
+        for (int i = 0; i < *num_piped_cmds; i++){
+            cmd_free(cmd_seq[i]);
+        };
+
     }
 
 
     // clear the set of foreground processes, if any
     fg_processes_pid.clear();
+
+    curr_pg_id = 0;  // reset the curr_pg_id to 0
+    fg_process_group_id = 0;  // reset the fg_process_group_id to 0
 }
 
 
@@ -304,6 +375,7 @@ cmd **tokenise_on_pipe(char *user_input, char *err, int *err_flag, int *num_cmds
             piped_cmds_seq[i]->background = 1;
         }
     }
+    printf("No error\n");
 
     // *err_flag = 0;
     return piped_cmds_seq;
@@ -322,7 +394,15 @@ int main()
     fg_processes_pid.clear();
     bg_processes_pid.clear();
 
-    signal(SIGCHLD, manage_child);
+
+    // setting the signal handlers     
+    signal(SIGCHLD, manage_child); // SIGCHLD is sent to the parent process when a child process terminates either normally or abnormally
+
+    signal(SIGINT, sigint_handler); // SIGINT is sent to the process when the user presses Ctrl+C
+
+    signal(SIGTSTP, force_bg_run_handler); // SIGTSTP is sent to the process when the user presses Ctrl+Z, but here we need to send process to the background if Ctrl+Z is pressed
+
+    signal(SIGTTOU, SIG_IGN); 
 
     while(1){
         printf("\033[1;31m");  // set the text color to red
@@ -466,3 +546,5 @@ int main()
     fclose(log_fp);
     return 0;
 }
+
+

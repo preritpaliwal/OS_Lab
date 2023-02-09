@@ -4,6 +4,7 @@
 
 vector_string *vector_string_init(int capacity)
 {
+    
     vector_string *v = (vector_string *)malloc(sizeof(vector_string));
     v->capacity = capacity;
     v->size = 0;

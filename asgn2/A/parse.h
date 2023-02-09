@@ -13,7 +13,7 @@ typedef struct  {
     int out_redirect; // 1 if output redirect, 0 otherwise
     int in_fd; // file descriptor for input
     int out_fd; // file descriptor for output
-    int fd[2];  // file descriptor for pipe (fd[0] is read end, fd[1] is write end)
+    // int fd[2];  // file descriptor for pipe (fd[0] is read end, fd[1] is write end)
     int background; // 1 if background, 0 otherwise
 }cmd;
 
