@@ -19,7 +19,7 @@ string getCmd(bool echo)
 
     if ((fp = fopen("history.txt", "r")) == NULL)
     {
-        perror("History file not found. Creating a new one.");
+        // perror("History file not found. Creating a new one.");
         fp = fopen("history.txt", "w");
         fclose(fp);
         fp = fopen("history.txt", "r");
