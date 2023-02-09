@@ -325,8 +325,18 @@ int main()
 
         size_t input_size = 0;
         char *user_input = NULL;
-        user_input = get_cmd();
+
+        if(fgets(user_input,MAX_BUFF_SIZE,stdin) == NULL){
+            free(user_input);
+            perror("Failed to read input.\n");
+            exit(1);
+        }
+
         input_size = strlen(user_input);
+        printf("%s", user_input);
+
+        // user_input = get_cmd();
+        // input_size = strlen(user_input);
 
         // tokenize the user input on the basis of the pipe character
         char *err = strdup("");
@@ -538,6 +548,7 @@ int main()
                 }
             }
         }
+        
         else
         {
             printf("This is the parent process.\n");

@@ -46,3 +46,43 @@ pwd
 pwd
 pwd
 exit
+ls
+delep data.txt
+./A
+./a.out
+35
+PPPranav
+gcc A.c;
+ls
+ls .
+gcc A.c
+gcc
+gcc A.c - A.out
+gcc A.c - A.out
+gcc A.c - A.out
+gcc A.c - A.out
+gcc A.c - A.out
+gcc A.c - A.out
+gcc A.c - A.out
+gcc A.c - A.out
+gcc A.c - A.out
+gcc A.c - A.out
+make
+make
+make
+ls
+ls .
+pwd
+ps aux
+ps aux
+clear
+clear
+clear
+clear
+clear
+neofetch
+exit
+secondfirstthird
+hellosecondfirstthird
+heyhellosecondfirstthirdlauda
+clear

@@ -274,13 +274,13 @@ char *get_cmd()
     return c_cmd;
 }
 
-// int main()
-// {
-//     while (1)
-//     {
-//         char *cmd = get_cmd();
-//         printf("\ncmd : %s \n", cmd);
-//     }
+int main()
+{
+    while (1)
+    {
+        char *cmd = get_cmd();
+        printf("\ncmd : %s \n", cmd);
+    }
 
-//     return 0;
-// }
+    return 0;
+}
