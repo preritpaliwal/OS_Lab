@@ -38,7 +38,7 @@ void str_concat_str(char *s1, char *s2){
 void str_concat_char(char *s1, char c){
     // printf("str_concat_char: realloc \n");
     s1 = (char *)realloc(s1, sizeof(char) * (strlen(s1) + 2));
-    int p =strlen(s1);
+    int p = strlen(s1);
     s1[p] = c;
     s1[p + 1] = '\0';
 }
@@ -129,17 +129,6 @@ int cmd_parse(cmd *c, char *err){
         vector_string_push_back(tokens, temp);
         // printf("%s\n", temp);
         temp = strdup("");
-    }
-
-    for (int i = 0; i < tokens->size; i++){
-        // null terminated string
-        // str_concat_char(tokens->data[i], '\0');
-        // printf("%s1\n", tokens->data[i]);
-        for (int j = 0; j < strlen(tokens->data[i]); j++){
-            printf("%d_", tokens->data[i][j]);
-        }
-        printf("\n");
-
     }
 
     for (int j = 0; j < tokens->size; j++){
@@ -321,9 +310,7 @@ cmd **tokenise_on_pipe(char *user_input, char *err, int *err_flag, int *num_cmds
 
         else
         {
-            printf("%c\n", user_input[i]);
             str_concat_char(temp, user_input[i]);
-            // printf("%s\n", temp);
         }
     }
 

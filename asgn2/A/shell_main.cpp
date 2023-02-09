@@ -325,20 +325,8 @@ int main()
 
         size_t input_size = 0;
         char *user_input = NULL;
-        user_input = (char *)malloc(MAX_BUFF_SIZE * sizeof(char));
-
-        // fflush(stdin);
-        // read the user input
-        // if (fgets(user_input,MAX_BUFF_SIZE,stdin)==NULL)
-        // {
-        //     free(user_input);
-        //     perror("Failed to read input.\n");
-        //     exit(1);
-        // }
-
         user_input = get_cmd();
         input_size = strlen(user_input);
-        printf("Recieved input %s on length %d.", user_input, input_size);
 
         // tokenize the user input on the basis of the pipe character
         char *err = strdup("");
