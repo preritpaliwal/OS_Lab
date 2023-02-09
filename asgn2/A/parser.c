@@ -29,14 +29,14 @@ void cmd_free(cmd *c){
 }
 
 void str_concat_str(char *s1, char *s2){
-    printf("str_concat_str: realloc \n");
+    // printf("str_concat_str: realloc \n");
     s1 = (char *)realloc(s1, sizeof(char) * (strlen(s1) + strlen(s2) + 1));
     strcat(s1, s2);
     s1[strlen(s1) + strlen(s2)] = '\0';
 }
 
 void str_concat_char(char *s1, char c){
-    printf("str_concat_char: realloc \n");
+    // printf("str_concat_char: realloc \n");
     s1 = (char *)realloc(s1, sizeof(char) * (strlen(s1) + 2));
     s1[strlen(s1)] = c;
     s1[strlen(s1) + 1] = '\0';

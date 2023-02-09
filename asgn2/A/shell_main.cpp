@@ -26,7 +26,6 @@ int fg_process_group_id = 0;
 static pid_t fgpid = 0; // 0 means no foreground process 
 
 static void manage_child(int sig){
-    signal(SIGCHLD, manage_child);
     int status;
     pid_t ret_pid;
     while(true){
@@ -75,7 +74,7 @@ static void manage_child(int sig){
 }
 
 void sigint_handler(int sig){
-    signal(SIGINT, sigint_handler);
+    // signal(SIGINT, sigint_handler);
     // printf("\n");
     // fflush(stdout);
     return;
@@ -95,7 +94,7 @@ static void wait_for_fg_process(pid_t pid) {
 }
 
 void force_bg_run_handler(int sig){
-    signal(SIGTSTP, force_bg_run_handler);
+    // signal(SIGTSTP, force_bg_run_handler);
 
     if (fgpid != 0){ // if there is a foreground process running
     
@@ -243,10 +242,10 @@ void handle_process(cmd ** cmd_seq, int *num_piped_cmds, int background){
             exit(1);
         }
         
-        // clear the cmd seq if the foreground process has finished executing
-        for (int i = 0; i < *num_piped_cmds; i++){
-            cmd_free(cmd_seq[i]);
-        };
+        // // clear the cmd seq if the foreground process has finished executing
+        // for (int i = 0; i < *num_piped_cmds; i++){
+        //     cmd_free(cmd_seq[i]);
+        // };
 
     }
 
