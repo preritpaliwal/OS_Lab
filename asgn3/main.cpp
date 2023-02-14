@@ -10,6 +10,7 @@ using namespace std;
 
 #define KEY 235
 #define FILEPATH "facebook_combined.txt"
+#define SHARED_MEM_SIZE 1e5 + 5
 
 // #########################################
 // ## Ashwani Kumar Kamal (20CS10011)     ##
@@ -20,74 +21,51 @@ using namespace std;
 // ## Assignment - 4                      ##
 // #########################################
 
-typedef struct _node
-{
-    int data;
-    struct _node *next;
-} Node;
+/*
+graph (integer pointer) is a shared memory segment of size 1e5 + 5 bytes
+graph[0] stores the number of nodes in the graph
+graph[i] stores the node number of the node connected to node i
+*/
 
-typedef struct
-{
-    Node *NodeList;
-} HeadNode;
-
-typedef struct
-{
-    int n_nodes;
-    HeadNode *head;
-} SharedGraph;
-
-SharedGraph *init_graph(int);
-Node *init_node(int);
-void insert_node(SharedGraph *, int, int);
+int *init_graph(key_t, int);
+void insert_node(int *, int, int);
 
 int main()
 {
     key_t key = ftok(FILEPATH, KEY);
-    key_t shmid = shmget(key, 1024, IPC_CREAT | 0666);
+    key_t shmid = shmget(key, SHARED_MEM_SIZE, IPC_CREAT | 0666);
+    int *graph = init_graph(shmid, SHARED_MEM_SIZE);
 
+    insert_node(graph, 1, 2);
+
+    shmdt(graph);
     return 0;
 }
 
-SharedGraph *init_graph(int n_nodes)
+int *init_graph(key_t shmid, int n_nodes)
 {
-    SharedGraph *graph = (SharedGraph *)malloc(sizeof(SharedGraph));
-    graph->n_nodes = n_nodes;
-    graph->head = (HeadNode *)malloc(sizeof(HeadNode) * n_nodes);
-    for (int i = 0; i < n_nodes; i++)
-    {
-        graph->head[i].NodeList = NULL;
-    }
+    int *graph = (int *)shmat(shmid, NULL, 0);
+    graph[0] = n_nodes;
     return graph;
 }
 
-Node *init_node(int data)
+void insert_node(int *graph, int src, int dest)
 {
-    Node *node = (Node *)malloc(sizeof(Node));
-    node->data = data;
-    node->next = NULL;
-    return node;
-}
-
-void insert_node(SharedGraph *graph, int src, int dest)
-{
-    Node *n1 = init_node(src);
-    Node *n2 = init_node(dest);
-    Node *t = (Node *)malloc(sizeof(Node));
-
-    if (graph->head[dest].NodeList == NULL)
-        graph->head[dest].NodeList = n1;
+    if (graph[dest] == -1)
+        graph[dest] = src;
     else
     {
-        n1->next = graph->head[dest].NodeList;
-        graph->head[dest].NodeList = n1;
+        int temp = graph[dest];
+        graph[dest] = src;
+        graph[src] = temp;
     }
 
-    if (graph->head[src].NodeList == NULL)
-        graph->head[src].NodeList = n2;
+    if (graph[src] == -1)
+        graph[src] = dest;
     else
     {
-        n2->next = graph->head[src].NodeList;
-        graph->head[src].NodeList = n2;
+        int temp = graph[src];
+        graph[src] = dest;
+        graph[dest] = temp;
     }
 }
