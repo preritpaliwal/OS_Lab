@@ -14,6 +14,7 @@ Threads:
     1) userSimulator: (Only 1 such thread)
         a) Three Actions possible: Post, Comment, Like.
         b) Randomly select 100 nodes.
+        ## Can a same node be repeated in this 100 ## (According to current implementation: YES)
         c) For Every Node, take N Actions where every action is randomly sampled from the three.
         d) Here, N is proportional to log2(DEGREE OF THE NODE).
         ## Thus N = k*(log2(DEGREE)) so here is k always constant or is this also supposed to be chosen randomly?? ##
