@@ -8,7 +8,7 @@ Every Node also has a variable to store in which order to show the feed.
     value = 0 means according to priority of friends 
     value = 1 means feed would be shown chronologically
 
-## How to maintain priority of friends?? (any ideas) ##
+## How to maintain priority of friends?? (any ideas) ## // SOLVED (MENTIONED IN ASGN ITSELF)
 
 Threads:
     1) userSimulator: (Only 1 such thread)
