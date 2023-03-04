@@ -6,6 +6,8 @@
 #include <signal.h>
 #include <unistd.h> // to use sleep
 using namespace std;
+#define N_THREADS 3
+#define N_LOCKS 2
 
 enum ActionType { POST, COMMENT, LIKE };
 
@@ -47,8 +49,26 @@ struct Graph{
 Graph graph;
 FILE *logFile;
 ActionQueue newActions;
+pthread_mutex_t lock[N_LOCKS];
+pthread_t t_id[N_THREADS];
+
 char graphFilePath[] = "musae_git_edges.csv";
 char logFilePath[] = "sns.log";
+
+
+void segFaultHandler(int sig) {
+    void *array[10];
+    size_t size;
+
+  // get void*'s for all entries on the stack
+    size = backtrace(array, 10);
+
+  // print out all the frames to stderr
+    fprintf(stderr, "Error: signal %d:\n", sig);
+    backtrace_symbols_fd(array, size, STDERR_FILENO);
+    exit(1);
+}
+
 
 void initGraph(){
     graph.graphNodes = NULL;
@@ -65,6 +85,24 @@ void initLogFile(){
     }
 }
 
+void initAllLocks(){
+    for(int i = 0;i<N_LOCKS;i++){
+        if (pthread_mutex_init(&(lock[i]), NULL) != 0) {
+            printf("\n mutex init has failed\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+void destroyAllLocks(){
+    for(int i = 0;i<N_LOCKS;i++){
+        if (pthread_mutex_destroy(&(lock[i])) != 0) {
+            printf("\n mutex destroy has failed\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
 int getRandomNumber(int upper = graph.num_nodes,int lower = 0){
     return ((rand()%(upper-lower))+ lower);
 }
@@ -78,12 +116,6 @@ Action *generateAction(Node *n){
     return a;
 }
 
-void initActionQueue(ActionQueue *aq){
-    aq->head = NULL;
-    aq->tail = NULL;
-    aq->len = 0;
-}
-
 ActionNode *generateActionNode(Action *a){
     ActionNode *an = (ActionNode *)malloc(sizeof(ActionNode));
     an->action = a;
@@ -91,11 +123,19 @@ ActionNode *generateActionNode(Action *a){
     return an;
 }
 
+void initActionQueue(ActionQueue *aq){
+    aq->head = NULL;
+    aq->tail = NULL;
+    aq->len = 0;
+}
+
 int pushActionQueue(ActionQueue *aq, ActionNode *an){
     if(aq->head==NULL){
         aq->head = an;
     }
-    an->next = aq->tail;
+    if(aq->tail != NULL){
+        aq->tail->next = an;    
+    }
     aq->tail = an;
     return ++(aq->len);
 }
@@ -225,16 +265,16 @@ void calcPriority(){
 }
 
 void *userSimulator(void *args){
-    int actionproportionalityConstant = 2;
+    int actionProportionalityConstant = 2;
     while(true){
         // select 100 random nodes;
         srand(time(NULL));
         for(int _ = 0;_<100;_++){
-            cout<<"sampling node i = "<<_<<endl;
+            // cout<<"sampling node i = "<<_<<endl;
             int nodeNum = getRandomNumber();
             Node *curNode = &(graph.graphNodes[nodeNum]);
             
-            int NumberOfActions = 1+actionproportionalityConstant*log2(curNode->degree);
+            int NumberOfActions = 1+actionProportionalityConstant*log2(curNode->degree);
             // printf("Node Number: %d\nNum of Action: %d, Degree: %d\n\n",nodeNum,NumberOfActions,curNode->degree);
             fprintf(logFile,"Node Number: %d\nNum of Action: %d, Degree: %d\n\n",nodeNum,NumberOfActions,curNode->degree);
             
@@ -243,7 +283,9 @@ void *userSimulator(void *args){
                 // printf("Action: \nuserID:%d,actionId,%d,actionType:%d,timeStamp:%ld\n",action->userId,action->actionId,action->actionType,action->timeStamp);
                 fprintf(logFile,"Action: \nuserID:%d,actionId,%d,actionType:%d,timeStamp:%ld\n",action->userId,action->actionId,action->actionType,action->timeStamp);
                 pushActionQueue(&(curNode->wallQueue),action);
+                pthread_mutex_lock(&(lock[0]));
                 pushActionQueue(&newActions,action);
+                pthread_mutex_unlock(&(lock[0]));
                 // printf("pushed in both queues\n");
                 // fprintf(logFile,"pushed in both queues\n");
             }
@@ -254,50 +296,64 @@ void *userSimulator(void *args){
 }
 
 void *pushUpdate(void *args){
-    cout<<"Running pushUpdate"<<endl;
     while(true){
         if(newActions.len==0){
             continue;
         }
-        cout<<"Finally have something to do"<<endl;
-        // PUT A LOCK ON THIS!!
+        pthread_mutex_lock(&(lock[0]));
         Action *curAction = newActions.head->action;
-        cout<<"##### selected action"<<endl;
         popActionQueue(&newActions);
-        cout<<"##### POPPED out the action"<<endl;
-
+        pthread_mutex_unlock(&(lock[0]));
         Node *curNode = &(graph.graphNodes[curAction->userId]);
         for(int i = 0;i<curNode->degree;i++){
-            cout<<"#####ITERATING ON NEighbors i = "<<i<<endl;
             Node *curNeigh = &(graph.graphNodes[curNode->neighbors[i]]);
-            // PUT A LOCK ON THIS ASWELL
+            pthread_mutex_lock(&(lock[1]));
             pushActionQueue(&(curNeigh->feedQueue),curAction);
-            cout<<"\n\n#####Pushing in feedqueue of all neighbors##########\n\n"<<endl;
+            pthread_mutex_unlock(&(lock[1]));
         }
     }
     return 0;
 }
 
 void *readPost(void *args){
-    return 0;;
+    return 0;
 }
 
-void handler(int sig) {
-  void *array[10];
-  size_t size;
 
-  // get void*'s for all entries on the stack
-  size = backtrace(array, 10);
+void runThreads(){
+    for(int i = 0;i<N_THREADS;i++){
+        fprintf(logFile,"Creating Thread Number: %d\n",i);
+        printf("Creating Thread Number: %d\n",i);
+        if(i==0){
+            if(pthread_create(&(t_id[i]),NULL,userSimulator,NULL)!=0){
+                printf("\n pthread create has failed\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        else if(i<2){
+            if(pthread_create(&(t_id[i]),NULL,pushUpdate,NULL)!=0){
+                printf("\n pthread create has failed\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        else{
+            if(pthread_create(&(t_id[i]),NULL,readPost,NULL)!=0){
+                printf("\n pthread create has failed\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+}
 
-  // print out all the frames to stderr
-  fprintf(stderr, "Error: signal %d:\n", sig);
-  backtrace_symbols_fd(array, size, STDERR_FILENO);
-  exit(1);
+void joinThreads(){
+    for(int i = 0;i<N_THREADS;i++){
+        pthread_join(t_id[i],NULL);
+    }
 }
 
 int main()
 {
-    signal(SIGSEGV, handler);   // install our handler
+    signal(SIGSEGV, segFaultHandler);   // install our handler
 
     initGraph();
     initLogFile();
@@ -308,23 +364,11 @@ int main()
     printf("Number of Edges: %d\n", graph.num_edges);
     printf("Number of Nodes: %d\n", graph.num_nodes);
 
-    pthread_t t_id[3];
-    for(int i = 0;i<3;i++){
-        fprintf(logFile,"Creating Thread Number: %d",i);
-        printf("Creating Thread Number: %d",i);
-        if(i==0){
-            pthread_create(&(t_id[i]),NULL,userSimulator,NULL);
-        }
-        else if(i<2){
-            pthread_create(&(t_id[i]),NULL,pushUpdate,NULL);
-        }
-        else{
-            pthread_create(&(t_id[i]),NULL,readPost,NULL);
-        }
-    }
-    for(int i = 0;i<36;i++){
-        pthread_join(t_id[i],NULL);
-    }
+    initAllLocks();
+    runThreads();
+    joinThreads();
+    destroyAllLocks();
+
     fclose(logFile);
     return 0;
 }
