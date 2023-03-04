@@ -1,3 +1,12 @@
+// #########################################
+// ## Ashwani Kumar Kamal (20CS10011)     ##
+// ## Pranav Nyati (20CS30037)            ##
+// ## Prerit Paliwal (20CS10046)          ##
+// ## Vibhu (20CS10072)                   ##
+// ## Operating Systems Laboratory        ##
+// ## Assignment - 5                      ##
+// #########################################
+
 #include <iostream>
 #include <pthread.h>
 #include <time.h>
@@ -5,9 +14,12 @@
 #include <execinfo.h>
 #include <signal.h>
 #include <unistd.h> // to use sleep
+
 using namespace std;
+
 #define N_THREADS 3
 #define N_LOCKS 2
+#define N_QUEUES 2
 
 enum ActionType { POST, COMMENT, LIKE };
 
@@ -16,6 +28,7 @@ struct Action{
     int actionId;
     int actionType;
     time_t timeStamp;
+    int recId;
 };
 
 struct ActionNode{
@@ -48,7 +61,7 @@ struct Graph{
 
 Graph graph;
 FILE *logFile;
-ActionQueue newActions;
+ActionQueue sharedQueues[N_QUEUES];
 pthread_mutex_t lock[N_LOCKS];
 pthread_t t_id[N_THREADS];
 
@@ -60,10 +73,8 @@ void segFaultHandler(int sig) {
     void *array[10];
     size_t size;
 
-  // get void*'s for all entries on the stack
     size = backtrace(array, 10);
 
-  // print out all the frames to stderr
     fprintf(stderr, "Error: signal %d:\n", sig);
     backtrace_symbols_fd(array, size, STDERR_FILENO);
     exit(1);
@@ -113,6 +124,17 @@ Action *generateAction(Node *n){
     a->actionId = ++(n->actionCounter);
     a->actionType = getRandomNumber(3);
     a->timeStamp = time(NULL);
+    a->recId = -1;
+    return a;
+}
+
+Action *generateAction(Action *a1,Node *n){
+    Action *a = (Action *)malloc(sizeof(a1));
+    a->userId = a1->userId;
+    a->actionId = a1->actionId;
+    a->actionType = a1->actionType;
+    a->timeStamp = a1->timeStamp;
+    a->recId = n->number;
     return a;
 }
 
@@ -127,6 +149,12 @@ void initActionQueue(ActionQueue *aq){
     aq->head = NULL;
     aq->tail = NULL;
     aq->len = 0;
+}
+
+void initQueues(){
+    for(int i = 0;i<N_QUEUES;i++){
+        initActionQueue(&(sharedQueues[i]));
+    }
 }
 
 int pushActionQueue(ActionQueue *aq, ActionNode *an){
@@ -199,29 +227,27 @@ void addNeighbor(Node *n1,Node *n2){
     n2->neighbors[n2->degree -1] = n1->number;
 }
 
-void addEdge(Graph *graph,int n1,int n2){
-    int posmax = max(n1,n2);
-    if(posmax>=graph->num_nodes){
-        // cout<<"num of nodes"<<graph->num_nodes<<endl;
-        graph->graphNodes = (Node *)realloc(graph->graphNodes,(posmax+1)*sizeof(Node));
-        if(graph->graphNodes==NULL){
-            printf("Error!! could not allocate new memory\n");
-            exit(EXIT_FAILURE);
-        }
-        if(n1>graph->num_nodes){
-            initNode(&(graph->graphNodes[n1]),n1);
-        }
-        if(n2>graph->num_nodes){
-            initNode(&(graph->graphNodes[n2]),n2);
-        }
-        graph->num_nodes = posmax+1;
-    }
-    addNeighbor(&(graph->graphNodes[n1]),&(graph->graphNodes[n2]));
-    graph->num_edges++;
-}
+// void addEdge(Graph *graph,int n1,int n2){
+//     int posmax = max(n1,n2);
+//     if(posmax>=graph->num_nodes){
+//         graph->graphNodes = (Node *)realloc(graph->graphNodes,(posmax+1)*sizeof(Node));
+//         if(graph->graphNodes==NULL){
+//             printf("Error!! could not allocate new memory\n");
+//             exit(EXIT_FAILURE);
+//         }
+//         if(n1>graph->num_nodes){
+//             initNode(&(graph->graphNodes[n1]),n1);
+//         }
+//         if(n2>graph->num_nodes){
+//             initNode(&(graph->graphNodes[n2]),n2);
+//         }
+//         graph->num_nodes = posmax+1;
+//     }
+//     addNeighbor(&(graph->graphNodes[n1]),&(graph->graphNodes[n2]));
+//     graph->num_edges++;
+// }
 
 void readGraph(){
-    // read the contents of the input file
     FILE *graphFile = fopen(graphFilePath, "r");
     if (graphFile == NULL){
         perror("Error while opening the graph file.\n");
@@ -275,16 +301,16 @@ void *userSimulator(void *args){
             Node *curNode = &(graph.graphNodes[nodeNum]);
             
             int NumberOfActions = 1+actionProportionalityConstant*log2(curNode->degree);
-            // printf("Node Number: %d\nNum of Action: %d, Degree: %d\n\n",nodeNum,NumberOfActions,curNode->degree);
+            printf("Node Number: %d\nNum of Action: %d, Degree: %d\n\n",nodeNum,NumberOfActions,curNode->degree);
             fprintf(logFile,"Node Number: %d\nNum of Action: %d, Degree: %d\n\n",nodeNum,NumberOfActions,curNode->degree);
             
             for(int __ = 0;__<NumberOfActions;__++){
                 Action *action = generateAction(curNode);
-                // printf("Action: \nuserID:%d,actionId,%d,actionType:%d,timeStamp:%ld\n",action->userId,action->actionId,action->actionType,action->timeStamp);
+                printf("Action: \nuserID:%d,actionId,%d,actionType:%d,timeStamp:%ld\n",action->userId,action->actionId,action->actionType,action->timeStamp);
                 fprintf(logFile,"Action: \nuserID:%d,actionId,%d,actionType:%d,timeStamp:%ld\n",action->userId,action->actionId,action->actionType,action->timeStamp);
                 pushActionQueue(&(curNode->wallQueue),action);
                 pthread_mutex_lock(&(lock[0]));
-                pushActionQueue(&newActions,action);
+                pushActionQueue(&(sharedQueues[0]),action);
                 pthread_mutex_unlock(&(lock[0]));
                 // printf("pushed in both queues\n");
                 // fprintf(logFile,"pushed in both queues\n");
@@ -297,18 +323,20 @@ void *userSimulator(void *args){
 
 void *pushUpdate(void *args){
     while(true){
-        if(newActions.len==0){
+        if((sharedQueues[0]).len==0){
             continue;
         }
         pthread_mutex_lock(&(lock[0]));
-        Action *curAction = newActions.head->action;
-        popActionQueue(&newActions);
+        Action *curAction = (sharedQueues[0]).head->action;
+        popActionQueue(&(sharedQueues[0]));
         pthread_mutex_unlock(&(lock[0]));
         Node *curNode = &(graph.graphNodes[curAction->userId]);
         for(int i = 0;i<curNode->degree;i++){
             Node *curNeigh = &(graph.graphNodes[curNode->neighbors[i]]);
+            Action *newAction = generateAction(curAction,curNeigh);
+            pushActionQueue(&(curNeigh->feedQueue),newAction);
             pthread_mutex_lock(&(lock[1]));
-            pushActionQueue(&(curNeigh->feedQueue),curAction);
+            pushActionQueue(&(sharedQueues[1]),newAction);
             pthread_mutex_unlock(&(lock[1]));
         }
     }
@@ -316,6 +344,17 @@ void *pushUpdate(void *args){
 }
 
 void *readPost(void *args){
+    while(true){
+        if(sharedQueues[1].len==0){
+            continue;
+        }
+        pthread_mutex_lock(&(lock[1]));
+        Action *curAction = (sharedQueues[1]).head->action;
+        popActionQueue(&(sharedQueues[1]));
+        pthread_mutex_unlock(&(lock[1]));
+        printf("I {node number = %d} read action number %d of type %d posted by user %d at time %ld\n",curAction->recId,curAction->actionId,curAction->actionType,curAction->userId,curAction->timeStamp);
+        fprintf(logFile,"I {node number = %d} read action number %d of type %d posted by user %d at time %ld\n",curAction->recId,curAction->actionId,curAction->actionType,curAction->userId,curAction->timeStamp);
+    }
     return 0;
 }
 
@@ -357,7 +396,7 @@ int main()
 
     initGraph();
     initLogFile();
-    initActionQueue(&newActions);
+    initQueues();
     readGraph();
     calcPriority();
 
