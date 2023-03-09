@@ -44,9 +44,9 @@ struct ActionQueue{
 
 struct Node{
     int number;
-    int chorono;
+    int chorono;  // what is this used for ? Can't find it in the code other than the init function
     int degree;
-    int actionCounter;
+    int actionCounter;  // will need 3 counters for each action type
     ActionQueue wallQueue;
     ActionQueue feedQueue;
     int *neighbors;
