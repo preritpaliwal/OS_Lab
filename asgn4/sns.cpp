@@ -1,275 +1,103 @@
-// #########################################
-// ## Ashwani Kumar Kamal (20CS10011)     ##
-// ## Pranav Nyati (20CS30037)            ##
-// ## Prerit Paliwal (20CS10046)          ##
-// ## Vibhu (20CS10072)                   ##
-// ## Operating Systems Laboratory        ##
-// ## Assignment - 5                      ##
-// #########################################
+#include<iostream>
+#include<pthread.h>
+#include<signal.h>
+#include<unistd.h>
+#include<time.h>
+#include<math.h>
+#include <bits/stdc++.h>
 
-#include <iostream>
-#include <pthread.h>
-#include <time.h>
-#include <math.h>
-#include <execinfo.h>
-#include <signal.h>
-#include <unistd.h> // to use sleep
+#define GRAPH_FILE "musae_git_edges.csv"
+#define NUM_USER_SIM_THREADS 1
+#define NUM_PUSH_UPDATE_THREADS 25
+#define NUM_READ_POST_THREADS 10
+#define NUM_NODES 37700
+#define NUM_EDGES 289003
+#define MAX_ITERS 5
 
 using namespace std;
 
-#define N_USER_SIMULATOR_THREADS 1
-#define N_PUSH_UPDATE_THREADS 25
-#define N_READ_POST_THREADS 10
-#define N_LOCKS 2
-#define N_QUEUES 2
-#define N_THREADS N_USER_SIMULATOR_THREADS+N_PUSH_UPDATE_THREADS+N_READ_POST_THREADS
+//struct for an action (post, like, comment)
+typedef struct _Action{
+    int user_id;  // id of the user(node) who performed the action
+    int action_id; // id of the action (post, like, comment) performed by the user
+    int action_type; // 0: post, 1: like, 2: comment
+    time_t timestamp; // time at which the action was performed
+}Action;
 
-enum ActionType { POST, COMMENT, LIKE };
-
-struct Action{
-    int userId;
-    int actionId;
-    int actionType;
-    time_t timeStamp;
-    int recId;
-};
-
-struct ActionNode{
-    Action *action;
-    ActionNode* next;
-};
-
-struct ActionQueue{
-    ActionNode *head;
-    ActionNode *tail;
-    int len;
-};
-
-struct Node{
-    int number;
-    int chorono;  // what is this used for ? Can't find it in the code other than the init function
-    int degree;
-    int actionCounter;  // will need 3 counters for each action type
-    ActionQueue wallQueue;
-    ActionQueue feedQueue;
-    int neighSize;
-    int *neighbors;
-    int *priority;
-};
-
-struct Graph{
-    int num_edges;
-    int num_nodes;
-    Node *graphNodes;
-};
-
-int ITERATIONS = 5;
-int threadToJoin = 0;
-Graph graph;
-FILE *logFile;
-ActionQueue sharedQueues[N_QUEUES];
-pthread_mutex_t lock[N_LOCKS];
-pthread_t t_id[N_THREADS];
-
-char graphFilePath[] = "musae_git_edges.csv";
-char logFilePath[] = "sns.log";
-
-
-void segFaultHandler(int sig) {
-    void *array[10];
-    size_t size;
-
-    size = backtrace(array, 10);
-
-    fprintf(stderr, "Error: signal %d:\n", sig);
-    backtrace_symbols_fd(array, size, STDERR_FILENO);
-    exit(1);
-}
-
-void initLogFile(){
-    logFile = fopen(logFilePath, "w");
-    if (NULL == logFile)
+struct myComp {
+    constexpr bool operator()(
+        pair<int, Action> const& a,
+        pair<int, Action> const& b)
+        const noexcept
     {
-        printf("log file can't be opened \n");
-        exit(EXIT_FAILURE);
+        return a.first < b.first;
     }
-}
+};
 
-void initAllLocks(){
-    for(int i = 0;i<N_LOCKS;i++){
-        if (pthread_mutex_init(&(lock[i]), NULL) != 0) {
-            printf("\n mutex init has failed\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-}
+// struct for node of a graph
+typedef struct _Node{
+    int node_id;
+    int degree;
+    int action_ctr[3];
+    int order_by;  // flag to display the Feed in order of popularity or recency (0: priority, 1: chronological)
 
-void destroyAllLocks(){
-    for(int i = 0;i<N_LOCKS;i++){
-        if (pthread_mutex_destroy(&(lock[i])) != 0) {
-            printf("\n mutex destroy has failed\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-}
+    vector <pair <int, int> > neighbors; // vector to store the neighbors of the node along with their priority
 
-int getRandomNumber(int upper = graph.num_nodes,int lower = 0){
+    queue <Action> wall_queue; // queue to store the actions performed by the user
+    queue <Action> feed_queue; // queue to store the actions performed by the user's friends(neighbors)
+    priority_queue <pair<int,Action>, vector<pair<int,Action>>, myComp> priority_feed_queue;       // a max heap to store the actions performed by the user's friends(neighbors) in order of their priority
+
+    pthread_mutex_t feed_mutex; // mutex to lock the feed_queue of the user
+}Node;
+
+
+// global variables and data structures
+vector <Node> graph;  
+queue <Action> new_action_q; // queue to store the new actions performed by the users
+queue <int> feed_update_q;  // queue to store the user_ids of the nodes whose feed got updated due to pushUpdate thread pushing new actions to their feed_queue
+
+pthread_mutex_t action_q_mutex;  // mutex to lock the new_action_q
+pthread_mutex_t logfile_mutex;   // mutex to lock the logfile
+pthread_mutex_t feed_update_q_mutex;   // mutex to lock the common queue shared between pushUpdate and readPost threads
+
+pthread_cond_t action_q_cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t feed_update_q_cond = PTHREAD_COND_INITIALIZER;
+
+map <int, string > action_map = {{0, "POST"}, {1, "LIKE"}, {2, "COMMENT"}};
+
+int thread_to_join = 0;
+FILE *fp;
+
+int getRandomNumber(int upper = NUM_NODES,int lower = 0){
     return ((rand()%(upper-lower))+ lower);
 }
 
-Action *generateAction(Node *n){
-    Action *a = (Action *)malloc(sizeof(Action));
-    a->userId = n->number;
-    a->actionId = ++(n->actionCounter);
-    a->actionType = getRandomNumber(3);
-    a->timeStamp = time(NULL);
-    a->recId = -1;
-    return a;
+// initialize a Node
+void initNode(Node *node, int node_id){
+    node->node_id = node_id;
+    node->degree = 0;
+    node->action_ctr[0] = 0;
+    node->action_ctr[1] = 0;
+    node->action_ctr[2] = 0;
+    node->order_by = getRandomNumber(2); // 1: chronological, 0: priority
+    pthread_mutex_init(&node->feed_mutex, NULL);
 }
 
-Action *generateAction(Action *a1,Node *n){
-    Action *a = (Action *)malloc(sizeof(Action));
-    a->userId = a1->userId;
-    a->actionId = a1->actionId;
-    a->actionType = a1->actionType;
-    a->timeStamp = a1->timeStamp;
-    a->recId = n->number;
-    return a;
-}
-
-ActionNode *generateActionNode(Action *a){
-    ActionNode *an = (ActionNode *)malloc(sizeof(ActionNode));
-    an->action = a;
-    an->next = NULL;
-    return an;
-}
-
-void initActionQueue(ActionQueue *aq){
-    aq->head = NULL;
-    aq->tail = NULL;
-    aq->len = 0;
-}
-
-void initQueues(){
-    for(int i = 0;i<N_QUEUES;i++){
-        initActionQueue(&(sharedQueues[i]));
-    }
-}
-
-int pushActionQueue(ActionQueue *aq, ActionNode *an){
-    if(aq->head==NULL){
-        aq->head = an;
-    }
-    if(aq->tail != NULL){
-        aq->tail->next = an;    
-    }
-    aq->tail = an;
-    return ++(aq->len);
-}
-
-int pushActionQueue(ActionQueue *aq, Action *a){
-    return pushActionQueue(aq,generateActionNode(a));
-}
-
-int popActionQueue(ActionQueue *aq){
-    if(aq->head==NULL){
-        return aq->len;
-    }
-    aq->head = aq->head->next;
-    if(aq->head==NULL){
-        aq->tail = NULL;
-    }
-    return --(aq->len);
-}
-
-void initNode(Node *n,int num){
-    n->number = num;
-    n->chorono = 1;
-    n->degree = 0;
-    n->actionCounter = 0;
-    initActionQueue(&(n->wallQueue));
-    initActionQueue(&(n->feedQueue));
-    n->neighSize = 5;
-    n->neighbors = (int *)malloc(n->neighSize*sizeof(int));
-    n->priority = NULL;
-    for(int i = 0;i<n->neighSize;i++){
-        n->neighbors[i] = -1;
-    }
-}
-
-
+// initialize the graph
 void initGraph(){
-    graph.num_edges = 0;
-    graph.num_nodes = 37700;
-    graph.graphNodes = (Node *)malloc((graph.num_nodes+1)*sizeof(Node));
-    if(graph.graphNodes==NULL){
-        printf("Error!! could not allocate new memory\n");
-        exit(EXIT_FAILURE);
-    }
-    for(int i = 0;i<graph.num_nodes+1;i++){
-        initNode(&(graph.graphNodes[i]),i);
-    }
-}
 
-void reallocateNeighbor(Node *n){
-    int tmp[n->neighSize];
-    for(int i = 0;i<n->neighSize;i++){
-        tmp[i] = n->neighbors[i];
+    for(int i=0; i<NUM_NODES; i++){
+        Node node;
+        initNode(&node, i);
+        graph.push_back(node);
     }
-    n->neighbors = (int *)realloc(n->neighbors,2*(n->neighSize)*(sizeof(int)));
-    if(n->neighbors==NULL){
-        printf("Error!! could not allocate new memory\n");
-        exit(EXIT_FAILURE);
-    }
-    for(int i = 0;i<n->neighSize;i++){
-        n->neighbors[i] = tmp[i];
-    }
-    n->neighSize *=2;
-}
-
-void addNeighbor(Node *n1,Node *n2){
-    if(n1->degree+1 == n1->neighSize){
-        reallocateNeighbor(n1);
-    }
-    if(n2->degree+1 == n2->neighSize){
-        reallocateNeighbor(n2);
-    }
-    n1->neighbors[(n1->degree)++] = n2->number;
-    n2->neighbors[(n2->degree)++] = n1->number;
-}
-
-void addEdge(int n1,int n2){
-    addNeighbor(&(graph.graphNodes[n1]),&(graph.graphNodes[n2]));
-    graph.num_edges++;
-}
-
-void readGraph(){
-    FILE *graphFile = fopen(graphFilePath, "r");
-    if (graphFile == NULL){
-        perror("Error while opening the graph file.\n");
-        exit(EXIT_FAILURE);
-    }
-    char line[100];
-    int idx = 0;
-    while (fgets(line, sizeof(line), graphFile) != NULL){
-        idx++;
-        // cout<<idx<<endl;
-        if(idx==1){
-            continue;
-        }
-        int node1, node2;
-        sscanf(line, "%d,%d", &node1, &node2);
-        // cout<<line<<" "<<node1<<" "<<node2<<endl;
-        addEdge(node1,node2);
-    }
-    fclose(graphFile);
 }
 
 int calcPriorityUtil(Node *n1,Node *n2){
     int common = 0;
     for(int i = 0;i<n1->degree;i++){
         for(int j = 0;j<n2->degree;j++){
-            if(n1->neighbors[i] == n2->neighbors[j]){
+            if (n1->neighbors[i].first == n2->neighbors[j].first){
                 common++;
             }
         }
@@ -277,191 +105,383 @@ int calcPriorityUtil(Node *n1,Node *n2){
     return common;
 }
 
+// function to calculate priority between pair of nodes (= number of common neighbors)
 void calcPriority(){
-    for(int i = 0;i<graph.num_nodes;i++){
-        Node *curNode = &(graph.graphNodes[i]);
-        curNode->priority = (int *)malloc(curNode->degree*(sizeof(int)));
-        for(int j = 0;j<curNode->degree;j++){
-            curNode->priority[j] = calcPriorityUtil(curNode,&(graph.graphNodes[curNode->neighbors[j]]));
+
+    for(int i = 0;i<NUM_NODES;i++){
+    
+        for (int j = 0; j < graph[i].neighbors.size(); j++){
+            int neighbor_id = graph[i].neighbors[j].first;
+            int priority = calcPriorityUtil(&graph[i], &graph[neighbor_id]);
+            graph[i].neighbors[j].second = priority;
         }
     }
 }
 
-void *userSimulator(void *args){
-    int actionProportionalityConstant = 2;
-    // cout<<"called userSimulator"<<endl;
-    while(ITERATIONS--){
-        // select 100 random nodes;
-        printf("\n\n####ITERATION: %d####\n\n",ITERATIONS);
-        fprintf(logFile,"\n\n####ITERATION: %d####\n\n",ITERATIONS);
-        srand(time(NULL));
-        for(int _ = 0;_<100;_++){
-            int nodeNum = getRandomNumber();
-            Node *curNode = &(graph.graphNodes[nodeNum]);
-            
-            int NumberOfActions = 1+actionProportionalityConstant*log2(curNode->degree);
-            printf("Node Number: %d\nNum of Action: %d, Degree: %d\n\n",nodeNum,NumberOfActions,curNode->degree);
-            fprintf(logFile,"Node Number: %d\nNum of Action: %d, Degree: %d\n\n",nodeNum,NumberOfActions,curNode->degree);
-            
-            for(int __ = 0;__<NumberOfActions;__++){
-                Action *action = generateAction(curNode);
-                // pushActionQueue(&(curNode->wallQueue),action);
-                pthread_mutex_lock(&(lock[0]));
-                printf("[User Simulator Thread]Pushed Action:- userID:%d,actionId,%d,actionType:%d,timeStamp:%ld\n",action->userId,action->actionId,action->actionType,action->timeStamp);
-                fprintf(logFile,"[User Simulator Thread]Pushed Action:- userID:%d,actionId,%d,actionType:%d,timeStamp:%ld\n",action->userId,action->actionId,action->actionType,action->timeStamp);
-                pushActionQueue(&(sharedQueues[0]),action);
-                pthread_mutex_unlock(&(lock[0]));
-            }
-        }
-        // sleep for 2 seconds
-        sleep(2);
-    }
-    printf("\n\n[User Simulator]Done taking actions, Byee!!\n\n");
-    fprintf(logFile,"\n\n[User Simulator]Done taking actions, Byee!!\n\n");
-    return 0;
-}
 
-void *pushUpdate(void *args){
-    // cout<<"called pushUpdate"<<endl;
-    while(true){
-        pthread_mutex_lock(&(lock[0]));
-        if((sharedQueues[0]).len==0){
-            pthread_mutex_unlock(&(lock[0]));
-            if(threadToJoin>=N_USER_SIMULATOR_THREADS ){
-                break;
-            }
+// function to read the graph from the file, and calculate the priority of each node with respect to its neighbors
+void readGraph(){
+    FILE *fp1 = fopen(GRAPH_FILE, "r");
+    if(fp1 == NULL){
+        cout << "Error opening the file" << endl;
+        exit(1);
+    }
+    char line[100];
+    int ctr = 0;
+    while(fgets(line, 100, fp1) != NULL){
+        if(ctr == 0){
+            ctr++;
             continue;
         }
-        ActionNode *curActionNode = (sharedQueues[0]).head;
-        Action *curAction = curActionNode->action;
-        popActionQueue(&(sharedQueues[0]));
-        printf("\t[Push Update Thread]Popped Action:- userID:%d,actionId,%d,actionType:%d,timeStamp:%ld,recID:%d\n",curAction->userId,curAction->actionId,curAction->actionType,curAction->timeStamp,curAction->recId);
-        fprintf(logFile,"\t[Push Update Thread]Popped Action:- userID:%d,actionId,%d,actionType:%d,timeStamp:%ld,recID:%d\n",curAction->userId,curAction->actionId,curAction->actionType,curAction->timeStamp,curAction->recId);
-        pthread_mutex_unlock(&(lock[0]));
-        Node *curNode = &(graph.graphNodes[curAction->userId]);
-        for(int i = 0;i<curNode->degree;i++){
-            Node *curNeigh = &(graph.graphNodes[curNode->neighbors[i]]);
-            Action *newAction = generateAction(curAction,curNeigh);
-            // pushActionQueue(&(curNeigh->feedQueue),newAction);
-            pthread_mutex_lock(&(lock[1]));
-            printf("\t[Push Update Thread]Pushed Action:- userID:%d,actionId,%d,actionType:%d,timeStamp:%ld,recID:%d\n",newAction->userId,newAction->actionId,newAction->actionType,newAction->timeStamp,newAction->recId);
-            fprintf(logFile,"\t[Push Update Thread]Pushed Action:- userID:%d,actionId,%d,actionType:%d,timeStamp:%ld,recID:%d\n",newAction->userId,newAction->actionId,newAction->actionType,newAction->timeStamp,newAction->recId);
-            pushActionQueue(&(sharedQueues[1]),newAction);
-            pthread_mutex_unlock(&(lock[1]));
-        }
-        free(curAction);
-        free(curActionNode);
+        ctr++;
+        int node1, node2;
+        sscanf(line, "%d,%d", &node1, &node2);
+        graph[node1].neighbors.push_back(make_pair(node2, 0));
+        graph[node2].neighbors.push_back(make_pair(node1, 0));
+        graph[node1].degree++;   graph[node2].degree++;
     }
-    printf("\n\n[Push Update]Done taking actions, Byee!!\n\n");
-    fprintf(logFile,"\n\n[Push Update]Done taking actions, Byee!!\n\n");
-    return 0;
+    cout << "Graph read successfully" << endl;
+
+    cout << "Computing priorities among nodes..." << endl;
+    // calculate the priority of each node with respect to each of its neighbors
+    calcPriority(); 
+
+    // sort the neighbors of each node in decreasing order of their priority
+    for(int i = 0;i<NUM_NODES;i++){
+        sort(graph[i].neighbors.begin(), graph[i].neighbors.end(), [](const pair <int, int> &a, const pair <int, int> &b){
+            return a.second > b.second;
+        });
+    }
+
+    cout << "Priorities among nodes computed!" << endl;
+    fclose(fp1);
 }
 
-void *readPost(void *args){
-    // cout<<"Called readpost"<<endl;
-    while(true){
+// userSimulator thread function
+void *userSimulator(void *arg){
+    srand(time(NULL));
+    sleep(6);
 
-        pthread_mutex_lock(&(lock[1]));
-        if(sharedQueues[1].len==0){
-            pthread_mutex_unlock(&(lock[1]));
-            if(threadToJoin>=N_USER_SIMULATOR_THREADS+N_PUSH_UPDATE_THREADS){
+    int itr = 0;
+
+    while (1){
+        pthread_mutex_lock(&logfile_mutex);
+        fprintf(fp, "[ US ] => ITERATION: %d\n\n", itr);
+        fflush(fp);
+        cout << "[ US ] => ITERATION: " << itr << endl;
+        pthread_mutex_unlock(&logfile_mutex);
+
+        // select 100 random nodes, and for each node, generate 10*(1 + log(degree)) actions
+        set <int> node_ids;
+        int total_actions = 0;
+
+        for (int i = 0; i < 100; i++){
+            int node_id = getRandomNumber();
+
+            while (node_ids.find(node_id) != node_ids.end())   // if node_id is already present in the set, generate a new node_id
+                node_id = getRandomNumber();
+
+            node_ids.insert(node_id);
+
+            int num_actions = 10 * (1 + log2(graph[node_id].degree));
+            total_actions += num_actions;
+
+            pthread_mutex_lock(&logfile_mutex);
+            fprintf(fp, "[ US ] => i: %d, Node_id: %d, Num_actions: %d\n", i, node_id, num_actions);
+            fflush(fp);
+            cout << "[ US ] => i: " << i << ", Node_id: " << node_id << ", Num_actions: " << num_actions << endl;
+            pthread_mutex_unlock(&logfile_mutex);
+
+            vector<Action> actions(num_actions);
+            for (int j = 0; j < num_actions; j++){
+                actions[j].user_id = node_id;
+                actions[j].action_type = getRandomNumber(3, 0);
+                graph[node_id].action_ctr[actions[j].action_type] += 1;
+                actions[j].action_id = graph[node_id].action_ctr[actions[j].action_type];
+                actions[j].timestamp = time(NULL);
+
+                // push the action into the Wall queue of the user
+                graph[node_id].wall_queue.push(actions[j]);
+
+                pthread_mutex_lock(&logfile_mutex);
+                fprintf(fp, "[ US ] Generated an action with Node_id %d: Action_num %d: Type: %s, ID: %d\n", node_id, j, action_map[actions[j].action_type].c_str(), actions[j].action_id);
+                fflush(fp);
+                pthread_mutex_unlock(&logfile_mutex);
+   
+            }
+
+            // push all the actions of a node into the new_action_queue
+            for (int j = 0; j < num_actions; j++){
+                pthread_mutex_lock(&action_q_mutex);
+                new_action_q.push(actions[j]);
+                pthread_cond_broadcast(&action_q_cond);
+                pthread_mutex_unlock(&action_q_mutex);
+            }
+            actions.clear();
+        }
+
+        pthread_mutex_lock(&logfile_mutex);
+        fprintf(fp, "[ US ] Total actions generated considering all 100 nodes for itrn %d: %d\n", itr, total_actions);
+        cout << "[ US ] Total actions generated considering all 100 nodes for itrn " << itr << ": " << total_actions << endl;
+        pthread_mutex_unlock(&logfile_mutex);
+
+        sleep(60); // sleep for 2 minutes
+
+        pthread_mutex_lock(&logfile_mutex);
+        cout << "[ US ] Iteration " << itr << " completed!" << endl;
+        pthread_mutex_unlock(&logfile_mutex);
+        
+        itr++;
+
+        if (itr == MAX_ITERS)
+        {
+            pthread_mutex_lock(&logfile_mutex);
+            cout << "Exiting userSimulator thread" << endl;
+            pthread_mutex_unlock(&logfile_mutex);
+
+            // broadcast the condition variable to all the threads waiting on it that the userSimulator thread has exited
+            pthread_mutex_lock(&action_q_mutex);
+            thread_to_join++;
+            pthread_cond_broadcast(&action_q_cond);
+            pthread_mutex_unlock(&action_q_mutex);
+
+            break;
+        }
+    }
+    pthread_exit(0); 
+}
+
+// // pushUpdate thread function
+void *pushUpdate(void *arg){
+
+    int thread_id = *((int *)arg);
+
+    int flag = 0;
+    // invoke the pushUpdate function whenever the size of the new_action_queue increases using condition variables
+    while(1){
+        pthread_mutex_lock(&action_q_mutex);
+
+        cout << "[ PU "<< thread_id << " ] " << "Push Thread " << thread_id << " waiting!" << endl;
+
+        while (new_action_q.empty()){
+            pthread_cond_wait(&action_q_cond, &action_q_mutex);
+
+            if (thread_to_join >= NUM_USER_SIM_THREADS){
+                flag = 1;
                 break;
             }
-            continue;
         }
-        ActionNode *curActionNode = (sharedQueues[1]).head;
-        Action *curAction = curActionNode->action;
-        popActionQueue(&(sharedQueues[1]));
-        printf("\t\t[Read Post Thread]Popped Action:- userID:%d,actionId,%d,actionType:%d,timeStamp:%ld,recID:%d\n",curAction->userId,curAction->actionId,curAction->actionType,curAction->timeStamp,curAction->recId);
-        fprintf(logFile,"\t\t[Read Post Thread]Popped Action:- userID:%d,actionId,%d,actionType:%d,timeStamp:%ld,recID:%d\n",curAction->userId,curAction->actionId,curAction->actionType,curAction->timeStamp,curAction->recId);
-        pthread_mutex_unlock(&(lock[1]));
-
-        if (graph.graphNodes[curAction->recId].chorono == 1){
-            printf("I {node number = %d} read action number %d of type %d posted by user %d at time %ld\n",curAction->recId,curAction->actionId,curAction->actionType,curAction->userId,curAction->timeStamp);
-            fprintf(logFile,"I {node number = %d} read action number %d of type %d posted by user %d at time %ld\n",curAction->recId,curAction->actionId,curAction->actionType,curAction->userId,curAction->timeStamp);
+        
+        if (flag == 1){
+            pthread_mutex_unlock(&action_q_mutex);
+            break;
         }
 
-        // else (PRIORITY)
+        Action action = new_action_q.front();
+        new_action_q.pop();
 
-        free(curAction);
-        free(curActionNode);
+        pthread_mutex_lock(&logfile_mutex);
+        fprintf(fp, "[ PU %d ] => Th %d pops action %d of type %s of user %d!\n", thread_id, thread_id, action.action_id, action_map[action.action_type].c_str(), action.user_id);
+        fflush(fp);
+        cout << "[ PU " << thread_id << " ] => Th " << thread_id << " pops action " << action.action_id << " of type " << action_map[action.action_type] << " of user " << action.user_id << "!" << endl;
+        cout << "Action queue size: " << new_action_q.size() << endl;
+        pthread_mutex_unlock(&logfile_mutex);
+
+        pthread_mutex_unlock(&action_q_mutex);
+
+        // after popping an action, push the action to the Feed queue of all the neighbors of the user(node) who performed the action
+        for (int i = 0; i < graph[action.user_id].degree; i++){
+            int neighbor_id = graph[action.user_id].neighbors[i].first;
+
+            // push the action into the central read_update_q common to all the pushUpdate and readPost threads
+            pthread_mutex_lock(&feed_update_q_mutex);
+            feed_update_q.push(neighbor_id);
+            pthread_cond_broadcast(&feed_update_q_cond);
+            pthread_mutex_unlock(&feed_update_q_mutex);
+
+            // push the action into the Feed queue of the neighbor
+            pthread_mutex_lock(&graph[neighbor_id].feed_mutex);
+            if (graph[neighbor_id].order_by == 1){
+                graph[neighbor_id].feed_queue.push(action);
+            }
+            else if (graph[neighbor_id].order_by == 0){
+                graph[neighbor_id].priority_feed_queue.push(make_pair(graph[action.user_id].neighbors[i].second, action));
+            }
+            pthread_mutex_unlock(&graph[neighbor_id].feed_mutex);
+        }
+
+        // write that action pushed to the Feed queue of all the neighbors to the sns.log file
+        pthread_mutex_lock(&logfile_mutex);
+        fprintf(fp, "[ PU %d ] => Th %d pushes action %d of type %s of user %d to all its nbrs!\n", thread_id, thread_id, action.action_id, action_map[action.action_type].c_str(), action.user_id);
+        fflush(fp);
+        cout << "[ PU " << thread_id << " ] => Th " << thread_id << " pushes action " << action.action_id << " of type " << action_map[action.action_type] << " of user " << action.user_id << " to all its nbrs!" << endl;
+        pthread_mutex_unlock(&logfile_mutex);
+
     }
-    printf("\n\n[Read Post]Done taking actions, Byee!!\n\n");
-    fprintf(logFile,"\n\n[Read Post]Done taking actions, Byee!!\n\n");
+
+    sleep(4);
+    
+    // signal the readPost threads that the pushUpdate thread has terminated
+    pthread_mutex_lock(&feed_update_q_mutex);
+    thread_to_join++;
+    pthread_cond_broadcast(&feed_update_q_cond);
+    pthread_mutex_unlock(&feed_update_q_mutex);
+
+    pthread_mutex_lock(&logfile_mutex);
+    cout << "Terminating PushUpdate thread " << thread_id << endl;
+    pthread_mutex_unlock(&logfile_mutex);
+
+    pthread_exit(0);
+}
+
+
+// readPost thread function
+void *readPost(void *arg){
+    
+    int thread_id = *((int *)arg);
+    int flag = 0;
+
+    while(1){
+        pthread_mutex_lock(&feed_update_q_mutex);
+
+        cout << "[ RP "<< thread_id << " ] " << "Read Thread " << thread_id << " waiting!" << endl;
+
+        while (feed_update_q.empty()){
+            pthread_cond_wait(&feed_update_q_cond, &feed_update_q_mutex);
+
+            if ( (thread_to_join >= NUM_USER_SIM_THREADS + NUM_PUSH_UPDATE_THREADS) && (feed_update_q.empty()) ){
+                flag = 1;
+                break;
+            }
+        }
+
+        if (flag == 1){
+            pthread_mutex_unlock(&feed_update_q_mutex);
+            break;
+        }
+
+        pthread_mutex_lock(&logfile_mutex);
+        cout << "Feed queue size: " << feed_update_q.size() << endl;
+        pthread_mutex_unlock(&logfile_mutex);
+
+        int user_id = feed_update_q.front();
+        feed_update_q.pop();
+
+        pthread_mutex_unlock(&feed_update_q_mutex);
+
+        if (graph[user_id].order_by == 1){  // order by timestamp (chronological order)
+
+            // read the Feed queue of the user_id
+            pthread_mutex_lock(&graph[user_id].feed_mutex);
+            while (!graph[user_id].feed_queue.empty()){
+                Action action = graph[user_id].feed_queue.front();
+                graph[user_id].feed_queue.pop();
+
+                // convert timestamp to string
+                time_t t = action.timestamp;
+                struct tm *tm = localtime(&t);
+                char date[20];
+                strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", tm);
+
+                pthread_mutex_lock(&logfile_mutex);
+                fprintf(fp, "[ RP %d ] => Th %d reads action %d of type %s posted by user %d (chrono) at %s from neighbor %d!\n", thread_id, thread_id, action.action_id, action_map[action.action_type].c_str(), action.user_id, date, user_id);
+                fflush(fp);
+                // cout << "[ RP " << thread_id << " ] => Th " << thread_id << " reads action " << action.action_id << " of type " << action_map[action.action_type] << " posted by user " << action.user_id << " (chrono) at " << date << " from neighbor " << user_id << "!" << endl;
+                pthread_mutex_unlock(&logfile_mutex);
+            }
+            pthread_mutex_unlock(&graph[user_id].feed_mutex);
+        }
+
+        else if (graph[user_id].order_by == 0){ // order by priority
+
+            // read the Priority Feed queue of the user_id
+            pthread_mutex_lock(&graph[user_id].feed_mutex);
+
+            while (!graph[user_id].priority_feed_queue.empty()){
+                Action action = graph[user_id].priority_feed_queue.top().second;
+                int priority = graph[user_id].priority_feed_queue.top().first;
+                graph[user_id].priority_feed_queue.pop();
+
+                // pthread_mutex_unlock(&graph[user_id].feed_mutex);
+
+                // convert timestamp to string
+                time_t t = action.timestamp;
+                struct tm *tm = localtime(&t);
+                char date[20];
+                strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", tm);
+
+                pthread_mutex_lock(&logfile_mutex);
+                // fprintf(fp, "[ RP %d ] => User_id: %d Priority Feed Queue size: %ld\n", thread_id, user_id,  graph[user_id].priority_feed_queue.size());
+                fprintf(fp, "[ RP %d ] => Th %d reads action %d of type %s posted by user %d (with p = %d) at %s from neighbor %d!\n", thread_id, thread_id, action.action_id, action_map[action.action_type].c_str(), action.user_id, priority, date, user_id);
+                fflush(fp);
+                // cout << "[ RP " << thread_id << " ] => Th " << thread_id << " reads action " << action.action_id << " of type " << action_map[action.action_type] << " posted by user " << action.user_id << " (with p = " << priority << ") at " << date << " from neighbor " << user_id << "!" << endl;
+                pthread_mutex_unlock(&logfile_mutex);
+
+                // pthread_mutex_lock(&graph[user_id].feed_mutex);
+            }
+            pthread_mutex_unlock(&graph[user_id].feed_mutex);
+        }
+    }
+
+    pthread_mutex_lock(&logfile_mutex);
+    cout << "Exiting readPost thread " << thread_id << endl;
+    pthread_mutex_unlock(&logfile_mutex);
+
+    pthread_exit(0);
+}
+
+
+int main(){
+
+    initGraph();      // initialize the graph
+    readGraph();      // read the graph from the file
+
+    fp  = fopen("sns.log", "a");
+
+    // create 1 userSimulator thread, 25 pushUpdate threads, 10 readPost threads
+    pthread_t userSim_thread, pushUpdate_thread[NUM_PUSH_UPDATE_THREADS], readPost_thread[NUM_READ_POST_THREADS];
+
+    pthread_mutex_init(&action_q_mutex, NULL);    
+    pthread_mutex_init(&feed_update_q_mutex, NULL);                  // initialize the feed_update_q_mutex
+    pthread_mutex_init(&logfile_mutex, NULL);                       // initialize the logfile_mutex
+
+    if (pthread_create(&userSim_thread, NULL, userSimulator, NULL) != 0) { // create the userSimulator thread
+        perror("Error creating userSimulator thread!");
+        exit(EXIT_FAILURE);
+    }
+
+    for(int i=0; i<NUM_PUSH_UPDATE_THREADS; i++){                // create the pushUpdate threads      
+        pthread_create(&pushUpdate_thread[i], NULL, pushUpdate, &i);
+        fprintf(fp, "[ Main ] => Created pushUpdate thread %d\n", i);
+        cout << "[ Main ] => Created pushUpdate thread " << i << endl; 
+        sleep(0.2);
+    }
+
+    for(int i=0; i<NUM_READ_POST_THREADS; i++){                  // create the readPost threads
+
+        pthread_create(&readPost_thread[i], NULL, readPost, &i);
+        sleep(0.1);
+        pthread_mutex_lock(&logfile_mutex);
+        fprintf(fp, "[ Main ] => Created readPost thread %d\n", i);
+        fflush(fp);
+        cout << "[ Main ] => Created readPost thread " << i << endl;
+        pthread_mutex_unlock(&logfile_mutex);
+    }
+
+    pthread_join(userSim_thread, NULL);                             // join the userSimulator thread
+
+    for(int i=0; i<NUM_PUSH_UPDATE_THREADS; i++){                    // join the pushUpdate threads
+        pthread_join(pushUpdate_thread[i], NULL);
+    }
+    
+    for(int i=0; i<NUM_READ_POST_THREADS; i++){                     // join the readPost threads
+        pthread_join(readPost_thread[i], NULL);
+        thread_to_join ++;
+    }
+
+    cout << "[ Main ] All readPost threads joined: thread_to_join = " << thread_to_join << endl;
+
+    fclose(fp);
     return 0;
 }
 
-
-void runThreads(){
-    for(int i = 0;i<N_THREADS;i++){
-        fprintf(logFile,"Creating Thread Number: %d\n",i);
-        printf("Creating Thread Number: %d\n",i);
-        if(i<N_USER_SIMULATOR_THREADS){
-            if(pthread_create(&(t_id[i]),NULL,userSimulator,NULL)!=0){
-                printf("\n pthread create has failed\n");
-                exit(EXIT_FAILURE);
-            }
-        }
-        else if(i<N_USER_SIMULATOR_THREADS+N_PUSH_UPDATE_THREADS){
-            if(pthread_create(&(t_id[i]),NULL,pushUpdate,NULL)!=0){
-                printf("\n pthread create has failed\n");
-                exit(EXIT_FAILURE);
-            }
-        }
-        else{
-            if(pthread_create(&(t_id[i]),NULL,readPost,NULL)!=0){
-                printf("\n pthread create has failed\n");
-                exit(EXIT_FAILURE);
-            }
-        }
-    }
-}
-
-void joinThreads(){
-    for(int i = 0;i<N_THREADS;i++){
-        pthread_join(t_id[i],NULL);
-        threadToJoin++;
-    }
-}
-
-void getDegreeAndNeighbor(){
-    int deg = 0;
-    for(int i = 0;i<graph.num_nodes;i++){
-        deg = max(deg,graph.graphNodes[i].degree);
-        fprintf(logFile,"%d's degree : %d\nNeighbors are: ",i,graph.graphNodes[i].degree);
-        for(int j = 0;j<graph.graphNodes[i].degree;j++){
-            fprintf(logFile,"%d,",graph.graphNodes[i].neighbors[j]);
-        }
-        fprintf(logFile,"\nPriority : ");
-        for(int j = 0;j<graph.graphNodes[i].degree;j++){
-            fprintf(logFile,"%d,",graph.graphNodes[i].priority[j]);
-        }
-        fprintf(logFile,"\n");
-    }
-    fprintf(logFile,"max degree: %d\n",deg);
-
-
-}
-
-int main()
-{
-    signal(SIGSEGV, segFaultHandler);   // install our handler
-
-    initGraph();
-    initLogFile();
-    initQueues();
-    readGraph();
-    calcPriority();
-    // getDegreeAndNeighbor();
-
-    printf("Number of Edges: %d\n", graph.num_edges);
-    printf("Number of Nodes: %d\n", graph.num_nodes);
-
-    initAllLocks();
-    runThreads();
-    joinThreads();
-    destroyAllLocks();
-
-    fclose(logFile);
-    return 0;
-}
