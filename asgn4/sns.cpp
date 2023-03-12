@@ -63,7 +63,7 @@ struct Graph{
     Node *graphNodes;
 };
 
-int ITERATIONS = 15;
+int ITERATIONS = 5;
 int threadToJoin = 0;
 Graph graph;
 FILE *logFile;
@@ -360,6 +360,7 @@ void *pushUpdate(void *args){
 void *readPost(void *args){
     // cout<<"Called readpost"<<endl;
     while(true){
+
         pthread_mutex_lock(&(lock[1]));
         if(sharedQueues[1].len==0){
             pthread_mutex_unlock(&(lock[1]));
@@ -374,8 +375,14 @@ void *readPost(void *args){
         printf("\t\t[Read Post Thread]Popped Action:- userID:%d,actionId,%d,actionType:%d,timeStamp:%ld,recID:%d\n",curAction->userId,curAction->actionId,curAction->actionType,curAction->timeStamp,curAction->recId);
         fprintf(logFile,"\t\t[Read Post Thread]Popped Action:- userID:%d,actionId,%d,actionType:%d,timeStamp:%ld,recID:%d\n",curAction->userId,curAction->actionId,curAction->actionType,curAction->timeStamp,curAction->recId);
         pthread_mutex_unlock(&(lock[1]));
-        printf("I {node number = %d} read action number %d of type %d posted by user %d at time %ld\n",curAction->recId,curAction->actionId,curAction->actionType,curAction->userId,curAction->timeStamp);
-        fprintf(logFile,"I {node number = %d} read action number %d of type %d posted by user %d at time %ld\n",curAction->recId,curAction->actionId,curAction->actionType,curAction->userId,curAction->timeStamp);
+
+        if (graph.graphNodes[curAction->recId].chorono == 1){
+            printf("I {node number = %d} read action number %d of type %d posted by user %d at time %ld\n",curAction->recId,curAction->actionId,curAction->actionType,curAction->userId,curAction->timeStamp);
+            fprintf(logFile,"I {node number = %d} read action number %d of type %d posted by user %d at time %ld\n",curAction->recId,curAction->actionId,curAction->actionType,curAction->userId,curAction->timeStamp);
+        }
+
+        // else (PRIORITY)
+
         free(curAction);
         free(curActionNode);
     }
