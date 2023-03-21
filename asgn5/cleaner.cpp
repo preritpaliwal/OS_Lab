@@ -38,7 +38,7 @@ void *cleaner_func(void *arg){
             sem_post(&q4_sem);
 
             // signal the room to evict any guest (sleeping in it currently) so that it can be cleaned
-            sem_post(&clean_evict_sem[r->room_no]);
+
 
             // reset the room attributes
             r->count = 0;
@@ -73,14 +73,17 @@ void *cleaner_func(void *arg){
             sem_post(&q1_sem);
 
             if (flag == 1){
-                pthread_mutex_lock(&signal_mutex);
-                use_count = 0;
-                pthread_cond_broadcast(&signal_cond);  // signal all the waiting guests
-                pthread_mutex_unlock(&signal_mutex);
+                sleep(1);
 
                 sem_wait(&write_sem);
                 cout << "[CT]: Cleaner " << *id << " ALL ROOMS CLEANED!" << endl;
                 sem_post(&write_sem);
+
+
+                pthread_mutex_lock(&signal_mutex);
+                use_count = 0;
+                pthread_cond_broadcast(&signal_cond);  // signal all the waiting guests
+                pthread_mutex_unlock(&signal_mutex);
             }
         }
 

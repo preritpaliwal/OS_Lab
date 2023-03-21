@@ -2,14 +2,7 @@
 
 using namespace std;
 
-
-// void evict_sig_handler(int guest_id, struct timespec *ts, int sleep_time){
-
-//     // keep timed_wait till timeout or 
-
-// }
-
-void signal_cleaners(int *id){
+int signal_cleaners(int *id){
     
     pthread_mutex_lock(&signal_mutex);
     use_count++;
@@ -19,12 +12,23 @@ void signal_cleaners(int *id){
         cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority << ") is the last guest to enter the hotel!" << endl;
         sem_post(&write_sem);
 
+        // broadcast to all rooms which have a guest staying currently to evict the guest
+        pthread_mutex_lock(&temp_two_occ_q_mutex);
+        pthread_cond_broadcast(&temp_two_occ_q_cond);
+        pthread_mutex_unlock(&temp_two_occ_q_mutex);
+
+        sleep(2);
+
         // signal the all the cleaner processes to clean the rooms
         pthread_cond_broadcast(&signal_cond);
         pthread_mutex_unlock(&signal_mutex);
+
+        return 1;
+        
         
     }
     pthread_mutex_unlock(&signal_mutex);
+    return 0;
 }
 
 void *guest_func(void *arg){
@@ -97,20 +101,15 @@ void *guest_func(void *arg){
             struct timespec ts2;
             clock_gettime(CLOCK_REALTIME, &ts2);
 
-            sem_wait(&err_sem);
-            if (ret == -1){
-                if (errno == ETIMEDOUT){
-                    sem_post(&err_sem);
+                if (ret == -1){
+
+                    sem_wait(&write_sem);
                     cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority <<  ") leaves room  (full stay)" << r->room_no << endl;
+                    sem_post(&write_sem);
+
                 }
-                else{
-                    perror("sem_timedwait");
-                    sem_post(&err_sem);
-                    exit(EXIT_FAILURE);
-                }
-            }
             else{
-                sem_post(&err_sem);
+                // sem_post(&err_sem);
 
                 int time_slept = sleep_time - (ts.tv_sec - ts2.tv_sec);
 
@@ -170,19 +169,6 @@ void *guest_func(void *arg){
                 // push the room to one_free_q
                 one_free_q.push(r_temp);
                 sem_post(&q3_sem);
-
-                // signal to other waiting guests that a new room has been added to the one_free_q using one_free_q_signal
-                
-                // check how many guests are waiting on one_free_q_signal
-                // int sem_value;
-                // sem_getvalue(&one_free_q_signal, &sem_value);
-
-                // cout << "Sem value: " << sem_value << endl;
-                // // signal only if a guest is waiting
-                // if (abs(sem_value) > 0){
-                //     sem_post(&one_free_q_signal);
-                // }
-
             }
         }
 
@@ -208,28 +194,22 @@ void *guest_func(void *arg){
                     exit(EXIT_FAILURE);
                 }
 
+                
                 // push the room to two_occ_q before starting the sleep
                 sem_wait(&q4_sem);
                 two_occ_q.push(r);
                 sem_post(&q4_sem);
 
-                // sem_wait(&use_count_sem);
-                // use_count++;
+                int last_flag = signal_cleaners(id);
 
-                // if (use_count == 2*num_hotel_rooms){
-                //     sem_wait(&write_sem);
-                //     cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority << ") is the last guest to enter the hotel!" << endl;
-                //     sem_post(&write_sem);
+                if (last_flag == 1){
 
-                //     // signal the all the cleaner processes to clean the rooms
-                //     pthread_mutex_lock(&signal_mutex);
-                //     pthread_cond_broadcast(&signal_cond);
-                //     pthread_mutex_unlock(&signal_mutex);
-                 
-                // }
-                // sem_post(&use_count_sem);
+                    sem_wait(&write_sem);
+                    cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority <<  ") was evicted from room " << r->room_no << " after " << 0 << " seconds by a cleaner!" << endl;
+                    sem_post(&write_sem);
 
-                signal_cleaners(id);
+                    continue;
+                }
 
                 // sleep for a random time b/w [10-30] seconds
                 sleep_time = (rand() % 21) + 10;
@@ -238,31 +218,27 @@ void *guest_func(void *arg){
                 cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority << ") is occupying room " << r->room_no << " for " << sleep_time << " seconds!" << endl;
                 sem_post(&write_sem);
 
-                // implement sleep using semaphores with timeout (sem_timedwait)
+                // implement sleep using pthread_cond_timedwait 
 
                 struct timespec ts;
                 clock_gettime(CLOCK_REALTIME, &ts);
                 ts.tv_sec += sleep_time;
 
-                int ret = sem_timedwait(&room_sem[r->room_no], &ts);
+                pthread_mutex_lock(&temp_two_occ_q_mutex);
+                int ret = pthread_cond_timedwait(&temp_two_occ_q_cond, &temp_two_occ_q_mutex, &ts);
+                pthread_mutex_unlock(&temp_two_occ_q_mutex);
 
                 struct timespec ts2;
                 clock_gettime(CLOCK_REALTIME, &ts2);
 
-                sem_wait(&err_sem);
+                // sem_wait(&err_sem);
                 if (ret == -1){
-                    if (errno == ETIMEDOUT){
-                        sem_post(&err_sem);
-                        cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority <<  ") leaves room  (full stay)" << r->room_no << endl;
-                    }
-                    else{
-                        perror("sem_timedwait");
-                        sem_post(&err_sem);
-                        exit(EXIT_FAILURE);
-                    }
+                    sem_wait(&write_sem);
+                    cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority <<  ") leaves room  (full stay)" << r->room_no << endl;
+                    sem_post(&write_sem);
+
                 }
                 else{
-                    sem_post(&err_sem);
 
                     int time_slept = sleep_time - (ts.tv_sec - ts2.tv_sec);
 
@@ -282,8 +258,6 @@ void *guest_func(void *arg){
                 sem_wait(&q2_sem);
                 if (!one_occ_q.empty()){
                     pair <room *, int> p = one_occ_q.top();
-                    // one_occ_q.pop();
-                    // sem_post(&q2_sem);
 
                     // if the priority of the guest occupying the room is lower than the priority of the new guest, then the new guest can evict the old guest
                     if (p.second < guests[*id].priority){
@@ -318,24 +292,16 @@ void *guest_func(void *arg){
                         two_occ_q.push(p.first);
                         sem_post(&q4_sem);
 
+                        int last_flag = signal_cleaners(id);
 
-                        // sem_wait(&use_count_sem);
-                        // use_count++;
+                        if (last_flag == 1){
 
-                        // if (use_count == 2*num_hotel_rooms){
-                        //     sem_wait(&write_sem);
-                        //     cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority << ") is the last guest to enter the hotel!" << endl;
-                        //     sem_post(&write_sem);
+                            sem_wait(&write_sem);
+                            cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority <<  ") was evicted from room " << p.first->room_no << " after " << 0 << " seconds by a cleaner!" << endl;
+                            sem_post(&write_sem);
 
-                        //     // signal the all the cleaner processes to clean the rooms
-                        //     pthread_mutex_lock(&signal_mutex);
-                        //     pthread_cond_broadcast(&signal_cond);
-                        //     pthread_mutex_unlock(&signal_mutex);
-                        
-                        // }
-                        // sem_post(&use_count_sem);
-
-                        signal_cleaners(id);
+                            continue;
+                        }
 
                         // sleep for a random time b/w [10-30] seconds
                         sleep_time = (rand() % 21) + 10;
@@ -349,25 +315,21 @@ void *guest_func(void *arg){
                         clock_gettime(CLOCK_REALTIME, &ts);
                         ts.tv_sec += sleep_time;
 
-                        int ret = sem_timedwait(&clean_evict_sem[p.first->room_no], &ts);
+                        // int ret = sem_timedwait(&clean_evict_sem[p.first->room_no], &ts);
+
+                        pthread_mutex_lock(&temp_two_occ_q_mutex);
+                        int ret = pthread_cond_timedwait(&temp_two_occ_q_cond, &temp_two_occ_q_mutex, &ts);
+                        pthread_mutex_unlock(&temp_two_occ_q_mutex);
 
                         struct timespec ts2;
                         clock_gettime(CLOCK_REALTIME, &ts2);
 
-                        sem_wait(&err_sem);
                         if (ret == -1){
-                            if (errno == ETIMEDOUT){
-                                sem_post(&err_sem);
-                                cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority <<  ") leaves room  (full stay)" << p.first->room_no << endl;
-                            }
-                            else{
-                                perror("sem_timedwait");
-                                sem_post(&err_sem);
-                                exit(EXIT_FAILURE);
-                            }
+                            sem_wait(&write_sem);
+                            cout << "[GT]: Guest " << *id << " (p = "<< guests[*id].priority <<  ") leaves room  (full stay)" << p.first->room_no << endl;
+                            sem_post(&write_sem);
                         }
                         else{
-                            sem_post(&err_sem);
 
                             int time_slept = sleep_time - (ts.tv_sec - ts2.tv_sec);
 

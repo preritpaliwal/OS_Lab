@@ -12,22 +12,22 @@ guest *guests;
 queue <room *> empty_q; // queue of empty rooms
 priority_queue <pair<room *, int>, vector<pair<room *, int>>, myComp> one_occ_q; // queue in which 1 guest has already stayed and is waiting for another guest
 queue <room *> one_free_q; // queue in which 1 guest has already stayed and is waiting for another guest
-queue <room *> two_occ_q; // queue in which 2 guests have already stayed and is waiting to be cleaned
+queue <room *> two_occ_q; // queue in which 1 guest has already stayed and 2nd guest is staying
+set <room *> temp_set;  // set to store rooms in which 2nd guest is currently sleeping
 
 sem_t q1_sem, q2_sem, q3_sem, q4_sem;
-sem_t one_free_q_signal;
 sem_t write_sem;
-sem_t room_avail_signal;
 sem_t *room_sem;
 sem_t *clean_evict_sem;
 sem_t err_sem;
 sem_t use_count_sem;
 
-
 pthread_mutex_t signal_mutex;
 pthread_cond_t signal_cond;
 pthread_mutex_t all_clean_mutex;
 pthread_cond_t all_clean_cond;
+pthread_mutex_t temp_two_occ_q_mutex;
+pthread_cond_t temp_two_occ_q_cond;
 
 void init_hotel_rooms(){
     for (int i = 0; i < num_hotel_rooms; i++){
@@ -44,9 +44,7 @@ void init_semaphores(){
     sem_init(&q2_sem, 0, 1);
     sem_init(&q3_sem, 0, 1);
     sem_init(&q4_sem, 0, 1);
-    sem_init(&one_free_q_signal, 0, 0);
     sem_init(&write_sem, 0, 1);
-    sem_init(&room_avail_signal, 0, 0);
     sem_init(&err_sem, 0, 1);
     sem_init(&use_count_sem, 0, 1);
 
@@ -64,6 +62,9 @@ void init_semaphores(){
     pthread_cond_init(&signal_cond, NULL);
     pthread_mutex_init(&all_clean_mutex, NULL);
     pthread_cond_init(&all_clean_cond, NULL);
+    pthread_mutex_init(&temp_two_occ_q_mutex, NULL);
+    pthread_cond_init(&temp_two_occ_q_cond, NULL);
+
 }
 
 void init_guests(){
