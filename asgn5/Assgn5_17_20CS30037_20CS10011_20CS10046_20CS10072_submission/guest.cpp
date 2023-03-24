@@ -52,7 +52,7 @@ void *guest_func(void *arg){
         pthread_mutex_unlock(&signal_guests_mutex);
 
         // sleep for a random time b/w [10-20] seconds
-        int sleep_time = (rand() % 10) + 1;
+        int sleep_time = (rand() % 11) + 10;
 
         sem_wait(&write_sem);
         cout << "[GT]: Guest " << *id <<  " (p = "<< guests[*id].priority << ") is sleeping for " << sleep_time << " seconds!" << endl;
