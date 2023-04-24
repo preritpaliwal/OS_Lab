@@ -74,3 +74,13 @@ ls -lRA
 ps aux
 ls
 exit
+ls
+clear
+ls
+ls
+ls -la
+ls -lRa
+clear
+clear
+EXIT
+exit

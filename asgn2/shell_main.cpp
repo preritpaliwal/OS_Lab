@@ -203,7 +203,7 @@ void handle_process(cmd ** cmd_seq, int *num_piped_cmds, int background){
             }
         }
 
-        // setpgid also  called in the parent as well as the child process as we don't know which process will execute first
+        // setpgid also called in the parent as well as the child process as we don't know which process will execute first
         setpgid(child_pid, curr_pg_id);  // set the process group id of the child process to the process group id of the 1st child process 
         if (curr_pg_id == 0){
 
